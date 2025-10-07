@@ -1,0 +1,21 @@
+version: "3.0"
+
+# Simple workflow with basic commands running in sequence
+# No dependencies, no file uploads, just simple shell commands
+
+jobs:
+  hello-world:
+    command: "echo"
+    args: ["Hello from Joblet!"]
+
+  list-files:
+    command: "ls"
+    args: ["-la", "/tmp"]
+
+  system-info:
+    command: "uname"
+    args: ["-a"]
+
+  current-date:
+    command: "date"
+    args: ["+%Y-%m-%d %H:%M:%S"]

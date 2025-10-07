@@ -1,0 +1,100 @@
+{
+  "name": "@joblet/admin",
+  "version": "1.0.0",
+  "description": "Standalone admin UI for Joblet with direct gRPC client",
+  "main": "dist/server/index.js",
+  "bin": {
+    "joblet-admin": "bin/joblet-admin"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "predev": "npm run ensure-proto",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:ui\"",
+    "dev:server": "tsx --watch src/server/index.ts",
+    "dev:ui": "vite",
+    "prebuild": "npm run ensure-proto",
+    "build": "npm run build:server && npm run build:ui",
+    "build:server": "tsc --project tsconfig.server.json",
+    "build:ui": "tsc --project tsconfig.ui.json && vite build",
+    "prestart": "npm run ensure-proto",
+    "start": "node dist/server/index.js",
+    "test": "vitest",
+    "test:ui": "echo \"UI tests not configured yet\" && exit 0",
+    "lint": "eslint src --ext ts,tsx --report-unused-disable-directives",
+    "lint:fix": "eslint src --ext ts,tsx --fix",
+    "type-check": "tsc --noEmit",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css}\"",
+    "ensure-proto": "node scripts/download-proto.js",
+    "copy-proto": "cp -r ../joblet-proto/proto .",
+    "update-proto": "npm run copy-proto && npm run type-check && npm run test",
+    "sync-proto": "curl -L https://github.com/ehsaniara/joblet-proto/archive/main.tar.gz | tar -xz --strip-components=1 joblet-proto-main/proto && npm run update-proto"
+  },
+  "keywords": [
+    "joblet",
+    "admin",
+    "ui",
+    "grpc",
+    "dashboard"
+  ],
+  "author": "Jay Ehsaniara",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joblet/joblet-admin.git"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.9.0",
+    "@grpc/proto-loader": "^0.7.8",
+    "clsx": "^1.2.1",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "google-protobuf": "^3.21.2",
+    "i18next": "^25.4.2",
+    "i18next-browser-languagedetector": "^8.2.0",
+    "lucide-react": "^0.263.1",
+    "mermaid": "^11.10.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-i18next": "^15.7.3",
+    "react-router-dom": "^6.8.0",
+    "recharts": "^2.15.4",
+    "ws": "^8.14.2",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.13",
+    "@types/express": "^4.17.17",
+    "@types/google-protobuf": "^3.15.6",
+    "@types/node": "^18.15.0",
+    "@types/react": "^18.0.28",
+    "@types/react-dom": "^18.0.11",
+    "@types/ws": "^8.5.5",
+    "@typescript-eslint/eslint-plugin": "^5.57.1",
+    "@typescript-eslint/parser": "^5.57.1",
+    "@vitejs/plugin-react": "^4.0.0",
+    "autoprefixer": "^10.4.14",
+    "concurrently": "^8.2.0",
+    "eslint": "^8.38.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.3.4",
+    "grpc-tools": "^1.12.4",
+    "postcss": "^8.4.23",
+    "prettier": "^2.8.8",
+    "tailwindcss": "^3.2.7",
+    "tsx": "^3.12.7",
+    "typescript": "^5.0.2",
+    "vite": "^4.3.2",
+    "vitest": "^0.31.1"
+  },
+  "files": [
+    "dist/",
+    "bin/",
+    "proto/",
+    "README.md",
+    "LICENSE"
+  ]
+}

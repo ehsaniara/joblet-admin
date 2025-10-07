@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "target": "ES2022",
+    "module": "ESNext",
+    "jsx": "preserve"
+  },
+  "include": ["src/server/**/*", "src/grpc/**/*", "src/shared/**/*"],
+  "exclude": ["src/ui/**/*", "**/*.test.*"]
+}

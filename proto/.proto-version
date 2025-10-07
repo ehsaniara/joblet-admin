@@ -1,0 +1,12 @@
+# Proto Version Tracking
+# This file tracks the version of joblet-proto currently in use
+
+PROTO_SOURCE=https://github.com/ehsaniara/joblet-proto
+PROTO_VERSION=v1.0.8
+LAST_UPDATED=2025-10-06
+UPDATED_BY=metrics-update
+
+# Usage:
+# npm run sync-proto    - Download latest from GitHub
+# npm run update-proto  - Copy from local and test
+# npm run copy-proto    - Simple copy from ../joblet-proto

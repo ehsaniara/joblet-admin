@@ -1,0 +1,903 @@
+syntax = "proto3";
+
+option go_package = "joblet/api/gen";
+
+package joblet;
+
+// Main service for running jobs and workflows
+service JobService {
+  // Job operations
+  rpc RunJob(RunJobRequest) returns (RunJobResponse){}
+  rpc GetJobStatus(GetJobStatusReq) returns (GetJobStatusRes){}
+  rpc StopJob(StopJobReq) returns (StopJobRes){}
+  rpc CancelJob(CancelJobReq) returns (CancelJobRes){}
+  rpc DeleteJob(DeleteJobReq) returns (DeleteJobRes){}
+  rpc DeleteAllJobs(DeleteAllJobsReq) returns (DeleteAllJobsRes){}
+  rpc GetJobLogs(GetJobLogsReq) returns (stream DataChunk);
+  rpc ListJobs(EmptyRequest) returns (Jobs){}
+
+  // Job metrics operations
+  rpc StreamJobMetrics(JobMetricsRequest) returns (stream JobMetricsSample){}
+  rpc GetJobMetricsHistory(JobMetricsHistoryRequest) returns (JobMetricsHistoryResponse){}
+  rpc GetJobMetricsSummary(JobMetricsSummaryRequest) returns (JobMetricsSummaryResponse){}
+
+  // Workflow operations
+  rpc RunWorkflow(RunWorkflowRequest) returns (RunWorkflowResponse){}
+  rpc GetWorkflowStatus(GetWorkflowStatusRequest) returns (GetWorkflowStatusResponse){}
+  rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse){}
+  rpc GetWorkflowJobs(GetWorkflowJobsRequest) returns (GetWorkflowJobsResponse){}
+}
+
+// Network service
+service NetworkService {
+  rpc CreateNetwork(CreateNetworkReq) returns (CreateNetworkRes){}
+  rpc ListNetworks(EmptyRequest) returns (Networks){}
+  rpc RemoveNetwork(RemoveNetworkReq) returns (RemoveNetworkRes){}
+}
+
+// Volume service
+service VolumeService {
+  rpc CreateVolume(CreateVolumeReq) returns (CreateVolumeRes){}
+  rpc ListVolumes(EmptyRequest) returns (Volumes){}
+  rpc RemoveVolume(RemoveVolumeReq) returns (RemoveVolumeRes){}
+}
+
+// Monitoring service
+service MonitoringService {
+  rpc GetSystemStatus(EmptyRequest) returns (SystemStatusRes){}
+  rpc StreamSystemMetrics(StreamMetricsReq) returns (stream SystemMetricsRes){}
+}
+
+// Runtime service for managing execution environments
+service RuntimeService {
+  rpc ListRuntimes(EmptyRequest) returns (RuntimesRes){}
+  rpc GetRuntimeInfo(RuntimeInfoReq) returns (RuntimeInfoRes){}
+  rpc TestRuntime(RuntimeTestReq) returns (RuntimeTestRes){}
+
+  rpc InstallRuntimeFromGithub(InstallRuntimeRequest) returns (InstallRuntimeResponse){}
+  rpc InstallRuntimeFromLocal(InstallRuntimeFromLocalRequest) returns (InstallRuntimeResponse){}
+  rpc StreamingInstallRuntimeFromGithub(InstallRuntimeRequest) returns (stream RuntimeInstallationChunk){}
+  rpc StreamingInstallRuntimeFromLocal(InstallRuntimeFromLocalRequest) returns (stream RuntimeInstallationChunk){}
+  rpc ValidateRuntimeSpec(ValidateRuntimeSpecRequest) returns (ValidateRuntimeSpecResponse){}
+  rpc RemoveRuntime(RuntimeRemoveReq) returns (RuntimeRemoveRes){}
+}
+
+message Jobs{
+  repeated Job jobs = 1;
+}
+
+message Job{
+  string uuid = 1;                         // Job UUID
+  string name = 2;                         // Job name (optional for individual jobs)
+  string command = 3;
+  repeated string args = 4;
+  int32 maxCPU = 5;
+  string cpuCores = 6;
+  int32 maxMemory = 7;
+  int32 maxIOBPS = 8;
+  string status = 9;
+  string startTime = 10;
+  string endTime = 11;
+  int32 exitCode = 12;
+  string scheduledTime = 13;    // Schedule time (RFC3339, empty = immediate)
+  string runtime = 14;          // Runtime spec
+  map<string, string> environment = 15;       // Environment variables
+  map<string, string> secret_environment = 16; // Secret env vars (masked in logs)
+
+  // GPU fields
+  repeated int32 gpu_indices = 17;         // Which GPUs allocated
+  int32 gpu_count = 18;                    // Number of GPUs requested/allocated
+  int32 gpu_memory_mb = 19;                // GPU memory requirement (MB)
+
+  // Node identification
+  string nodeId = 20;                      // Unique identifier of the Joblet node that executed this job
+}
+
+message EmptyRequest {}
+message FileUpload {
+  string path = 1;           // Path in workspace
+  bytes content = 2;         // Content
+  uint32 mode = 3;           // Unix permissions
+  bool isDirectory = 4;      // Is directory
+}
+// GetJobStatus
+message GetJobStatusReq{
+  string uuid = 1;                         // Job UUID identifier
+}
+
+message GetJobStatusRes{
+  string uuid = 1;                         // Job UUID identifier
+  string name = 2;                         // Human-readable job name (for workflows, empty for individual jobs)
+  string command = 3;
+  repeated string args = 4;
+  int32 maxCPU = 5;
+  string cpuCores = 6;
+  int32 maxMemory = 7;
+  int32 maxIOBPS = 8;
+  string status = 9;
+  string startTime = 10;
+  string endTime = 11;
+  int32 exitCode = 12;
+  string scheduledTime = 13;    // When the job should execute (empty if immediate)
+  map<string, string> environment = 14;       // Regular environment variables (visible)
+  map<string, string> secret_environment = 15; // Secret environment variables (masked)
+  string network = 16;                     // Network configuration
+  repeated string volumes = 17;            // Mounted volumes
+  string runtime = 18;                     // Runtime environment
+  string workDir = 19;                     // Working directory
+  repeated string uploads = 20;            // Uploaded files/directories
+  repeated string dependencies = 21;       // Job dependencies (for workflow jobs)
+  string workflowUuid = 22;               // Workflow UUID (if part of workflow)
+
+  // GPU allocation info
+  repeated int32 gpu_indices = 23;         // Which GPUs allocated to this job
+  int32 gpu_count = 24;                    // Number of GPUs requested/allocated
+  int32 gpu_memory_mb = 25;                // GPU memory requirement (MB)
+
+  // Node identification
+  string nodeId = 26;                      // Unique identifier of the Joblet node that executed this job
+}
+
+// StopJob
+message StopJobReq{
+  string uuid = 1;                         // Job UUID identifier
+}
+
+message StopJobRes{
+  string uuid = 1;                         // Job UUID identifier
+  string status = 2;
+  string endTime = 3;
+  int32 exitCode = 4;
+}
+
+// CancelJob - for canceling scheduled jobs only
+message CancelJobReq{
+  string uuid = 1;                         // Job UUID identifier
+}
+
+message CancelJobRes{
+  string uuid = 1;                         // Job UUID identifier
+  string status = 2;                       // Should be "CANCELED"
+}
+
+// DeleteJob
+message DeleteJobReq{
+  string uuid = 1;                         // Job UUID identifier
+}
+
+message DeleteJobRes{
+  string uuid = 1;                         // Job UUID identifier
+  bool success = 2;
+  string message = 3;
+}
+
+// DeleteAllJobs
+message DeleteAllJobsReq{
+  // Empty - deletes all non-running jobs
+}
+
+message DeleteAllJobsRes{
+  bool success = 1;
+  string message = 2;
+  int32 deleted_count = 3;                 // Jobs deleted
+  int32 skipped_count = 4;                 // Jobs skipped (still running)
+}
+
+// GetJobLogs
+message GetJobLogsReq{
+  string uuid = 1;                         // Job UUID identifier
+}
+
+message DataChunk {
+  bytes payload = 1;
+}
+
+message RuntimeInstallationChunk {
+  oneof chunk_type {
+    RuntimeInstallationProgress progress = 1;
+    RuntimeInstallationLog log = 2;
+    RuntimeInstallationResult result = 3;
+  }
+}
+
+message RuntimeInstallationProgress {
+  string message = 1;
+  int32 step = 2;
+  int32 total_steps = 3;
+}
+
+message RuntimeInstallationLog {
+  bytes data = 1;
+}
+
+message RuntimeInstallationResult {
+  bool success = 1;
+  string message = 2;
+  string runtime_spec = 3;
+  string install_path = 4;
+}
+
+message CreateNetworkReq {
+  string name = 1;
+  string cidr = 2;
+}
+
+message CreateNetworkRes {
+  string name = 1;
+  string cidr = 2;
+  string bridge = 3;
+}
+
+message RemoveNetworkReq {
+  string name = 1;
+}
+
+message RemoveNetworkRes {
+  bool success = 1;
+  string message = 2;
+}
+
+message Network {
+  string name = 1;
+  string cidr = 2;
+  string bridge = 3;
+  int32 jobCount = 4;
+}
+
+message Networks {
+  repeated Network networks = 1;
+}
+
+message CreateVolumeReq {
+  string name = 1;
+  string size = 2;        // Size (e.g., "1GB", "500MB")
+  string type = 3;        // Type: filesystem or memory
+}
+
+message CreateVolumeRes {
+  string name = 1;
+  string size = 2;
+  string type = 3;
+  string path = 4;        // Host path
+}
+
+message RemoveVolumeReq {
+  string name = 1;
+}
+
+message RemoveVolumeRes {
+  bool success = 1;
+  string message = 2;
+}
+
+message Volume {
+  string name = 1;
+  string size = 2;
+  string type = 3;
+  string path = 4;
+  string createdTime = 5;
+  int32 jobCount = 6;     // Jobs using this volume
+}
+
+message Volumes {
+  repeated Volume volumes = 1;
+}
+
+// System monitoring messages
+
+message SystemStatusRes {
+  string timestamp = 1;
+  bool available = 2;
+  HostInfo host = 3;
+  CPUMetrics cpu = 4;
+  MemoryMetrics memory = 5;
+  repeated DiskMetrics disks = 6;
+  repeated NetworkMetrics networks = 7;
+  IOMetrics io = 8;
+  ProcessMetrics processes = 9;
+  CloudInfo cloud = 10;
+  ServerVersionInfo server_version = 11;
+}
+
+message SystemMetricsRes {
+  string timestamp = 1;
+  HostInfo host = 2;
+  CPUMetrics cpu = 3;
+  MemoryMetrics memory = 4;
+  repeated DiskMetrics disks = 5;
+  repeated NetworkMetrics networks = 6;
+  IOMetrics io = 7;
+  ProcessMetrics processes = 8;
+  CloudInfo cloud = 9;
+}
+
+message StreamMetricsReq {
+  int32 intervalSeconds = 1; // How often to send updates (default: 5)
+  repeated string metricTypes = 2; // Optional: filter by types
+}
+
+// Monitoring data structures
+
+message HostInfo {
+  string hostname = 1;
+  string os = 2;
+  string platform = 3;
+  string platformFamily = 4;
+  string platformVersion = 5;
+  string kernelVersion = 6;
+  string kernelArch = 7;
+  string architecture = 8;
+  int32 cpuCount = 9;
+  int64 totalMemory = 10;
+  string bootTime = 11;
+  int64 uptime = 12;
+  string nodeId = 13;                  // Unique node identifier (UUID)
+  repeated string serverIPs = 14;      // Server IP addresses (can have multiple interfaces)
+  repeated string macAddresses = 15;   // MAC addresses for network interfaces
+}
+
+message CPUMetrics {
+  int32 cores = 1;
+  double usagePercent = 2;
+  double userTime = 3;
+  double systemTime = 4;
+  double idleTime = 5;
+  double ioWaitTime = 6;
+  double stealTime = 7;
+  repeated double loadAverage = 8; // 1, 5, 15 min load
+  repeated double perCoreUsage = 9;
+}
+
+message MemoryMetrics {
+  int64 totalBytes = 1;
+  int64 usedBytes = 2;
+  int64 freeBytes = 3;
+  int64 availableBytes = 4;
+  double usagePercent = 5;
+  int64 cachedBytes = 6;
+  int64 bufferedBytes = 7;
+  int64 swapTotal = 8;
+  int64 swapUsed = 9;
+  int64 swapFree = 10;
+}
+
+message DiskMetrics {
+  string device = 1;
+  string mountPoint = 2;
+  string filesystem = 3;
+  int64 totalBytes = 4;
+  int64 usedBytes = 5;
+  int64 freeBytes = 6;
+  double usagePercent = 7;
+  int64 inodesTotal = 8;
+  int64 inodesUsed = 9;
+  int64 inodesFree = 10;
+  double inodesUsagePercent = 11;
+}
+
+message NetworkMetrics {
+  string interface = 1;
+  int64 bytesReceived = 2;
+  int64 bytesSent = 3;
+  int64 packetsReceived = 4;
+  int64 packetsSent = 5;
+  int64 errorsIn = 6;
+  int64 errorsOut = 7;
+  int64 dropsIn = 8;
+  int64 dropsOut = 9;
+  double receiveRate = 10; // bytes/sec
+  double transmitRate = 11; // bytes/sec
+}
+
+message IOMetrics {
+  int64 totalReads = 1;
+  int64 totalWrites = 2;
+  int64 readBytes = 3;
+  int64 writeBytes = 4;
+  double readRate = 5;  // bytes/sec
+  double writeRate = 6; // bytes/sec
+  repeated DiskIOMetrics diskIO = 7;
+}
+
+message DiskIOMetrics {
+  string device = 1;
+  int64 readsCompleted = 2;
+  int64 writesCompleted = 3;
+  int64 readBytes = 4;
+  int64 writeBytes = 5;
+  int64 readTime = 6;  // ms
+  int64 writeTime = 7; // ms
+  int64 ioTime = 8;    // ms
+  double utilization = 9; // percent
+}
+
+message ProcessMetrics {
+  int32 totalProcesses = 1;
+  int32 runningProcesses = 2;
+  int32 sleepingProcesses = 3;
+  int32 stoppedProcesses = 4;
+  int32 zombieProcesses = 5;
+  int32 totalThreads = 6;
+  repeated ProcessInfo topByCPU = 7;
+  repeated ProcessInfo topByMemory = 8;
+}
+
+message ProcessInfo {
+  int32 pid = 1;
+  int32 ppid = 2;
+  string name = 3;
+  string command = 4;
+  double cpuPercent = 5;
+  double memoryPercent = 6;
+  int64 memoryBytes = 7;
+  string status = 8;
+  string startTime = 9;
+  string user = 10;
+}
+
+message CloudInfo {
+  string provider = 1;
+  string region = 2;
+  string zone = 3;
+  string instanceID = 4;
+  string instanceType = 5;
+  string hypervisorType = 6;
+  map<string, string> metadata = 7;
+}
+
+message ServerVersionInfo {
+  string version = 1;        // Version (e.g., "v1.2.3")
+  string git_commit = 2;     // Git commit
+  string git_tag = 3;        // Git tag
+  string build_date = 4;     // Build date
+  string component = 5;      // Component ("joblet")
+  string go_version = 6;     // Go version
+  string platform = 7;       // OS/arch (e.g., "linux/amd64")
+  string proto_commit = 8;   // Proto repository commit hash
+  string proto_tag = 9;      // Proto repository tag
+}
+
+// Runtime management messages
+message RuntimesRes {
+  repeated RuntimeInfo runtimes = 1;
+}
+
+message RuntimeInfo {
+  string name = 1;                  // Runtime name (e.g., "python-3.11-ml")
+  string language = 2;              // Language (e.g., "python")
+  string version = 3;               // Version (e.g., "3.11")
+  string description = 4;           // Description
+  int64 sizeBytes = 5;              // Size in bytes
+  repeated string packages = 6;     // Installed packages
+  bool available = 7;               // Ready to use
+  RuntimeRequirements requirements = 8;
+}
+
+message RuntimeRequirements {
+  repeated string architectures = 1; // Supported archs
+  bool gpu = 2;                      // Needs GPU
+}
+
+message RuntimeInfoReq {
+  string runtime = 1;               // e.g., "python-3.11-ml"
+}
+
+message RuntimeInfoRes {
+  RuntimeInfo runtime = 1;
+  bool found = 2;
+}
+
+message RuntimeTestReq {
+  string runtime = 1;               // e.g., "python-3.11-ml"
+}
+
+message RuntimeTestRes {
+  bool success = 2;
+  string output = 3;
+  string error = 4;
+  int32 exitCode = 5;
+}
+
+// Job and workflow messages
+
+message RunJobRequest {
+  string name = 1;                         // Job name
+  string command = 2;
+  repeated string args = 3;
+  int32 maxCpu = 4;
+  string cpuCores = 5;
+  int32 maxMemory = 6;
+  int32 maxIobps = 7;
+  repeated FileUpload uploads = 8;
+  string schedule = 9;
+  string network = 10;
+  repeated string volumes = 11;
+  string runtime = 12;
+  string workDir = 13;
+  map<string, string> environment = 14;
+  map<string, string> secret_environment = 18; // Secret env vars
+
+  // Workflow fields (when job is part of workflow)
+  string workflowUuid = 15;         // Workflow UUID
+  string jobUuid = 16;              // Job UUID
+  repeated JobRequirement requirements = 17;
+
+  // GPU fields (new GPU support)
+  int32 gpu_count = 19;             // How many GPUs requested
+  int32 gpu_memory_mb = 20;         // Minimum GPU memory needed (MB)
+}
+
+message RunJobResponse {
+  string jobUuid = 1;               // Job UUID identifier
+  string status = 2;
+  string command = 3;
+  repeated string args = 4;
+  int32 maxCpu = 5;
+  string cpuCores = 6;
+  int32 maxMemory = 7;
+  int32 maxIobps = 8;
+  string startTime = 9;
+  string endTime = 10;
+  int32 exitCode = 11;
+  string scheduledTime = 12;    // Schedule time
+}
+
+message JobRequirement {
+  string jobUuid = 1;               // Job UUID identifier  
+  string status = 2;
+  string expression = 3;
+}
+
+message RunWorkflowRequest {
+  string workflow = 1;                    // Workflow filename
+  int32 totalJobs = 2;
+  repeated string jobOrder = 3;
+  string yamlContent = 4;                 // YAML content
+  repeated FileUpload workflowFiles = 5;  // Workflow files
+}
+
+message RunWorkflowResponse {
+  string workflowUuid = 1;                 // Workflow UUID identifier
+  string status = 2;
+}
+
+message GetWorkflowStatusRequest {
+  string workflowUuid = 1;                 // Workflow UUID identifier
+}
+
+message GetWorkflowStatusResponse {
+  WorkflowInfo workflow = 1;
+  repeated WorkflowJob jobs = 2;
+}
+
+message ListWorkflowsRequest {
+  bool includeCompleted = 1;
+}
+
+message ListWorkflowsResponse {
+  repeated WorkflowInfo workflows = 1;
+}
+
+message GetWorkflowJobsRequest {
+  string workflowUuid = 1;                 // Workflow UUID identifier
+}
+
+message GetWorkflowJobsResponse {
+  repeated WorkflowJob jobs = 1;
+}
+message WorkflowInfo {
+  string uuid = 1;                         // Workflow UUID identifier
+  string status = 2;
+  int32 totalJobs = 3;
+  int32 completedJobs = 4;
+  int32 failedJobs = 5;
+  int32 canceledJobs = 6;
+  Timestamp createdAt = 7;
+  Timestamp startedAt = 8;
+  Timestamp completedAt = 9;
+  string yamlContent = 10;                 // Original YAML
+}
+
+message WorkflowJob {
+  string jobUuid = 1;                      // Job UUID identifier
+  string jobName = 2;                      // Job name from workflow
+  string status = 3;
+  repeated string dependencies = 4;
+  Timestamp startTime = 5;
+  Timestamp endTime = 6;
+  int32 exitCode = 7;
+}
+
+message Timestamp {
+  int64 seconds = 1;
+  int32 nanos = 2;
+}
+
+message InstallRuntimeRequest {
+  string runtimeSpec = 1;          // Runtime spec
+  string repository = 2;           // GitHub repo
+  string branch = 3;               // Branch
+  string path = 4;                 // Path in repo
+  bool forceReinstall = 5;         // Force reinstall
+}
+
+message InstallRuntimeResponse {
+  string buildJobUuid = 1;         // Install job UUID
+  string runtimeSpec = 2;          // Runtime spec
+  string status = 3;               // Status
+  string message = 4;              // Message
+  string repository = 5;           // Repo
+  string resolvedPath = 6;         // Path in repo
+}
+
+message InstallRuntimeFromLocalRequest {
+  string runtimeSpec = 1;          // Runtime spec
+  repeated RuntimeFile files = 2;   // Files to upload
+  bool forceReinstall = 3;         // Force reinstall
+}
+
+message RuntimeFile {
+  string path = 1;                 // Path in runtime dir
+  bytes content = 2;               // Content
+  bool executable = 3;             // Make executable
+}
+
+message ValidateRuntimeSpecRequest {
+  string runtimeSpec = 1;          // Runtime spec to validate
+}
+
+message ValidateRuntimeSpecResponse {
+  bool valid = 1;                  // Is valid
+  string message = 2;              // Message
+  string normalizedSpec = 3;       // Normalized spec
+  RuntimeSpecInfo specInfo = 4;    // Parsed spec
+}
+
+message RuntimeRemoveReq {
+  string runtime = 1;              // Runtime to remove
+}
+
+message RuntimeRemoveRes {
+  bool success = 1;                // Success
+  string message = 2;              // Message
+  int64 freedSpaceBytes = 3;       // Space freed
+}
+
+message RuntimeSpecInfo {
+  string language = 1;             // Language
+  string version = 2;              // Version
+  repeated string variants = 3;    // Variants
+  string architecture = 4;         // Architecture
+}
+
+// Job Metrics Messages
+
+message JobMetricsRequest {
+  string uuid = 1;                 // Job UUID identifier
+}
+
+message JobMetricsHistoryRequest {
+  string uuid = 1;                 // Job UUID identifier
+  int64 fromTimestamp = 2;         // Start timestamp (Unix seconds)
+  int64 toTimestamp = 3;           // End timestamp (Unix seconds)
+}
+
+message JobMetricsHistoryResponse {
+  repeated JobMetricsSample samples = 1;
+}
+
+message JobMetricsSummaryRequest {
+  string uuid = 1;                 // Job UUID identifier
+  int32 periodSeconds = 2;         // Aggregation period (default: 300s = 5min)
+}
+
+message JobMetricsSummaryResponse {
+  JobMetricsAggregate cpu = 1;
+  JobMetricsAggregate memory = 2;
+  JobMetricsAggregate io = 3;
+  JobMetricsAggregate network = 4;
+}
+
+message JobMetricsSample {
+  string jobId = 1;
+  int64 timestamp = 2;             // Unix timestamp in seconds
+  int32 sampleIntervalSeconds = 3;
+
+  // Metrics
+  JobCPUMetrics cpu = 4;
+  JobMemoryMetrics memory = 5;
+  JobIOMetrics io = 6;
+  JobNetworkMetrics network = 7;
+  JobProcessMetrics process = 8;
+  repeated JobGPUMetrics gpu = 9;
+
+  // Metadata
+  string cgroupPath = 10;
+  JobResourceLimits limits = 11;
+  repeated int32 gpuAllocation = 12;
+}
+
+message JobResourceLimits {
+  int32 cpu = 1;                   // CPU percentage limit
+  int64 memory = 2;                // Memory limit in bytes
+  int32 io = 3;                    // I/O limit in bytes/sec
+}
+
+message JobCPUMetrics {
+  uint64 usageUsec = 1;            // Total CPU time in microseconds
+  uint64 userUsec = 2;             // User mode CPU time
+  uint64 systemUsec = 3;           // Kernel mode CPU time
+  uint64 nrPeriods = 4;            // Number of enforcement periods
+  uint64 nrThrottled = 5;          // Number of throttled periods
+  uint64 throttledUsec = 6;        // Total throttled time
+  double usagePercent = 7;         // Current CPU usage %
+  double throttlePercent = 8;      // Percentage of time throttled
+
+  // PSI (Pressure Stall Information)
+  double pressureSome10 = 9;
+  double pressureSome60 = 10;
+  double pressureSome300 = 11;
+  double pressureFull10 = 12;
+  double pressureFull60 = 13;
+  double pressureFull300 = 14;
+}
+
+message JobMemoryMetrics {
+  uint64 current = 1;              // Current memory usage in bytes
+  uint64 max = 2;                  // Memory limit in bytes
+  double usagePercent = 3;         // Memory usage percentage
+
+  // Detailed memory stats
+  uint64 anon = 4;                 // Anonymous memory
+  uint64 file = 5;                 // File-backed memory (cache)
+  uint64 kernelStack = 6;          // Kernel stack memory
+  uint64 slab = 7;                 // Kernel slab memory
+  uint64 sock = 8;                 // Socket buffer memory
+  uint64 shmem = 9;                // Shared memory
+  uint64 fileMapped = 10;          // Memory-mapped files
+  uint64 fileDirty = 11;           // Dirty page cache
+  uint64 fileWriteback = 12;       // Pages under writeback
+  uint64 pgFault = 13;             // Page fault count
+  uint64 pgMajFault = 14;          // Major page fault count
+  uint64 oomEvents = 15;           // OOM killer invocations
+  uint64 oomKill = 16;             // Processes killed by OOM
+
+  // PSI
+  double pressureSome10 = 17;
+  double pressureSome60 = 18;
+  double pressureSome300 = 19;
+  double pressureFull10 = 20;
+  double pressureFull60 = 21;
+  double pressureFull300 = 22;
+}
+
+message JobIOMetrics {
+  map<string, DeviceIOMetrics> devices = 1; // Per-device metrics
+
+  // Aggregated metrics
+  uint64 totalReadBytes = 2;
+  uint64 totalWriteBytes = 3;
+  uint64 totalReadOps = 4;
+  uint64 totalWriteOps = 5;
+  uint64 totalDiscardBytes = 6;
+  uint64 totalDiscardOps = 7;
+
+  // Calculated rates
+  double readBPS = 8;              // Read bandwidth (bytes/sec)
+  double writeBPS = 9;             // Write bandwidth (bytes/sec)
+  double readIOPS = 10;            // Read IOPS
+  double writeIOPS = 11;           // Write IOPS
+
+  // PSI
+  double pressureSome10 = 12;
+  double pressureSome60 = 13;
+  double pressureSome300 = 14;
+  double pressureFull10 = 15;
+  double pressureFull60 = 16;
+  double pressureFull300 = 17;
+}
+
+message DeviceIOMetrics {
+  string device = 1;               // Device identifier (major:minor)
+  uint64 readBytes = 2;
+  uint64 writeBytes = 3;
+  uint64 readOps = 4;
+  uint64 writeOps = 5;
+  uint64 discardBytes = 6;
+  uint64 discardOps = 7;
+}
+
+message JobNetworkMetrics {
+  map<string, NetworkInterfaceMetrics> interfaces = 1;
+
+  // Aggregated metrics
+  uint64 totalRxBytes = 2;
+  uint64 totalTxBytes = 3;
+  uint64 totalRxPackets = 4;
+  uint64 totalTxPackets = 5;
+  uint64 totalRxErrors = 6;
+  uint64 totalTxErrors = 7;
+  uint64 totalRxDropped = 8;
+  uint64 totalTxDropped = 9;
+
+  // Calculated rates
+  double rxBPS = 10;               // Receive bandwidth (bytes/sec)
+  double txBPS = 11;               // Transmit bandwidth (bytes/sec)
+}
+
+message NetworkInterfaceMetrics {
+  string interface = 1;
+  uint64 rxBytes = 2;
+  uint64 txBytes = 3;
+  uint64 rxPackets = 4;
+  uint64 txPackets = 5;
+  uint64 rxErrors = 6;
+  uint64 txErrors = 7;
+  uint64 rxDropped = 8;
+  uint64 txDropped = 9;
+}
+
+message JobProcessMetrics {
+  uint64 current = 1;              // Current number of processes/threads
+  uint64 max = 2;                  // Maximum PIDs allowed
+  uint64 events = 3;               // PID limit hit count
+  uint64 threads = 4;              // Total thread count
+  uint64 running = 5;              // Running processes
+  uint64 sleeping = 6;             // Sleeping processes
+  uint64 stopped = 7;              // Stopped processes
+  uint64 zombie = 8;               // Zombie processes
+  uint64 openFDs = 9;              // Open file descriptors
+  uint64 maxFDs = 10;              // FD limit
+}
+
+message JobGPUMetrics {
+  // Device identification
+  int32 index = 1;                 // GPU device index
+  string uuid = 2;                 // GPU unique identifier
+  string name = 3;                 // GPU model name
+  string computeCapability = 4;    // CUDA compute capability
+  string driverVersion = 5;        // NVIDIA driver version
+
+  // Utilization metrics
+  double utilization = 6;          // GPU core utilization (0-100%)
+  uint64 memoryUsed = 7;           // GPU memory used (bytes)
+  uint64 memoryTotal = 8;          // GPU memory total (bytes)
+  uint64 memoryFree = 9;           // GPU memory free (bytes)
+  double memoryPercent = 10;       // Memory utilization percentage
+  double encoderUtil = 11;         // Video encoder utilization
+  double decoderUtil = 12;         // Video decoder utilization
+
+  // Performance metrics
+  uint64 smClock = 13;             // Streaming Multiprocessor clock (MHz)
+  uint64 memoryClock = 14;         // Memory clock speed (MHz)
+  double pcieThroughputRx = 15;    // PCIe receive throughput (MB/s)
+  double pcieThroughputTx = 16;    // PCIe transmit throughput (MB/s)
+
+  // Thermal & Power
+  double temperature = 17;         // GPU temperature (Celsius)
+  double temperatureMemory = 18;   // Memory temperature
+  double powerDraw = 19;           // Current power draw (Watts)
+  double powerLimit = 20;          // Power limit (Watts)
+  double fanSpeed = 21;            // Fan speed percentage
+
+  // Error & Health
+  uint64 eccErrorsSingle = 22;     // Single-bit ECC errors
+  uint64 eccErrorsDouble = 23;     // Double-bit ECC errors
+  uint64 xidErrors = 24;           // XID error events
+  uint64 retiredPages = 25;        // Retired memory pages
+  uint64 throttleReasons = 26;     // Throttling reason bitmask
+
+  // Process metrics
+  uint64 processesCount = 27;      // Number of processes using GPU
+  uint64 processesMemory = 28;     // Memory used by job processes
+  string computeMode = 29;         // Compute mode (exclusive/shared)
+}
+
+message JobMetricsAggregate {
+  double min = 1;
+  double max = 2;
+  double avg = 3;
+  double p50 = 4;                  // Median
+  double p95 = 5;
+  double p99 = 6;
+}

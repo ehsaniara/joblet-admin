@@ -1,0 +1,33 @@
+version: "3.0"
+
+# Sequential data processing pipeline
+# Each job depends on the previous one completing successfully
+
+jobs:
+  fetch-data:
+    command: "echo"
+    args: ["Fetching data from source..."]
+
+  validate-data:
+    command: "echo"
+    args: ["Validating data integrity..."]
+    requires:
+      - fetch-data: "COMPLETED"
+
+  transform-data:
+    command: "echo"
+    args: ["Transforming data format..."]
+    requires:
+      - validate-data: "COMPLETED"
+
+  load-data:
+    command: "echo"
+    args: ["Loading data to destination..."]
+    requires:
+      - transform-data: "COMPLETED"
+
+  send-notification:
+    command: "echo"
+    args: ["Pipeline completed successfully!"]
+    requires:
+      - load-data: "COMPLETED"

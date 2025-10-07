@@ -1,0 +1,31 @@
+version: "3.0"
+
+# Workflow using persistent volumes for data sharing between jobs
+# Requires volume: data-pipeline
+
+jobs:
+  write-data:
+    command: "sh"
+    args: ["-c", "echo 'Sample data from job 1' > /data/shared.txt && cat /data/shared.txt"]
+    volumes: ["data-pipeline:/data"]
+
+  read-data:
+    command: "sh"
+    args: ["-c", "cat /data/shared.txt && echo 'Data successfully read!'"]
+    volumes: ["data-pipeline:/data"]
+    requires:
+      - write-data: "COMPLETED"
+
+  append-data:
+    command: "sh"
+    args: ["-c", "echo 'Additional data from job 3' >> /data/shared.txt && cat /data/shared.txt"]
+    volumes: ["data-pipeline:/data"]
+    requires:
+      - read-data: "COMPLETED"
+
+  verify-data:
+    command: "sh"
+    args: ["-c", "wc -l /data/shared.txt && cat /data/shared.txt"]
+    volumes: ["data-pipeline:/data"]
+    requires:
+      - append-data: "COMPLETED"

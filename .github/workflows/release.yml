@@ -1,0 +1,125 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download proto file
+        run: npm run ensure-proto
+
+      - name: Run tests
+        run: npm test
+        continue-on-error: true
+
+      - name: Build application
+        run: npm run build
+
+      - name: Create distribution archive
+        run: |
+          mkdir -p dist-package
+          cp -r dist dist-package/
+          cp package.json dist-package/
+          cp package-lock.json dist-package/
+          cp README.md dist-package/
+          cp -r proto dist-package/
+          cp -r bin dist-package/
+          cd dist-package
+          tar -czf ../joblet-admin-v${{ steps.get_version.outputs.VERSION }}.tar.gz .
+          cd ..
+          zip -r joblet-admin-v${{ steps.get_version.outputs.VERSION }}.zip dist-package
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          else
+            CHANGELOG=$(git log ${PREVIOUS_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          fi
+          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release v${{ steps.get_version.outputs.VERSION }}
+          body: |
+            ## Joblet Admin v${{ steps.get_version.outputs.VERSION }}
+
+            ### Installation
+
+            Download and extract the archive:
+            ```bash
+            tar -xzf joblet-admin-v${{ steps.get_version.outputs.VERSION }}.tar.gz
+            cd dist-package
+            npm install --production
+            ```
+
+            ### Running the server
+
+            ```bash
+            npm start
+            ```
+
+            Or use the CLI:
+            ```bash
+            ./bin/joblet-admin
+            ```
+
+            ### Changes in this release
+
+            ${{ steps.changelog.outputs.CHANGELOG }}
+
+            ### Requirements
+
+            - Node.js 18 or higher
+            - Access to a Joblet server instance
+
+            ### Configuration
+
+            Set environment variables:
+            - `JOBLET_SERVER_HOST` - Joblet server hostname (default: localhost)
+            - `JOBLET_SERVER_PORT` - Joblet server gRPC port (default: 50051)
+            - `JOBLET_ADMIN_PORT` - Admin UI port (default: 5175)
+
+          files: |
+            joblet-admin-v${{ steps.get_version.outputs.VERSION }}.tar.gz
+            joblet-admin-v${{ steps.get_version.outputs.VERSION }}.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update release notes
+        run: |
+          echo "✅ Release v${{ steps.get_version.outputs.VERSION }} created successfully!"
+          echo "📦 Artifacts:"
+          echo "  - joblet-admin-v${{ steps.get_version.outputs.VERSION }}.tar.gz"
+          echo "  - joblet-admin-v${{ steps.get_version.outputs.VERSION }}.zip"

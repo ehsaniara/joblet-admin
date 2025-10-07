@@ -1,0 +1,30 @@
+#!/usr/bin/env node
+
+import { resolve } from 'path';
+import { spawn } from 'child_process';
+
+// Start the joblet-admin server
+const serverPath = resolve(process.cwd(), 'dist/server/index.js');
+const server = spawn('node', [serverPath], {
+  stdio: 'inherit',
+  env: {
+    ...process.env,
+    JOBLET_ADMIN_PORT: process.env.JOBLET_ADMIN_PORT || '5174',
+    JOBLET_ADMIN_HOST: process.env.JOBLET_ADMIN_HOST || 'localhost'
+  }
+});
+
+// Handle process termination
+process.on('SIGINT', () => {
+  server.kill('SIGINT');
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  server.kill('SIGTERM');
+  process.exit(0);
+});
+
+server.on('close', (code) => {
+  process.exit(code || 0);
+});
