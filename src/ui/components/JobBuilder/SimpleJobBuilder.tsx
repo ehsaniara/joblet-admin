@@ -669,7 +669,7 @@ export const SimpleJobBuilder: React.FC<SimpleJobBuilderProps> = ({
                                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                         disabled={loadingRuntimes}
                                     >
-                                        <option value="">Default</option>
+                                        <option key="default" value="">Default</option>
                                         {runtimes.map((runtime) => (
                                             <option key={runtime.id} value={runtime.name}>
                                                 {runtime.name} {runtime.version && `(${runtime.version})`}
@@ -692,13 +692,13 @@ export const SimpleJobBuilder: React.FC<SimpleJobBuilderProps> = ({
                                         disabled={loadingNetworks}
                                     >
                                         {loadingNetworks ? (
-                                            <option value="">Loading networks...</option>
+                                            <option key="loading" value="">Loading networks...</option>
                                         ) : (
                                             <>
                                                 {/* Default built-in networks */}
-                                                <option value="bridge">bridge (default)</option>
-                                                <option value="host">host</option>
-                                                <option value="none">none</option>
+                                                <option key="bridge" value="bridge">bridge (default)</option>
+                                                <option key="host" value="host">host</option>
+                                                <option key="none" value="none">none</option>
 
                                                 {/* Custom networks */}
                                                 {networks

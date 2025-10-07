@@ -96,10 +96,67 @@ Browser ←→ joblet-admin (HTTP/WebSocket) ←→ Joblet Server (gRPC)
 
 ## Development
 
+### Running Tests
+
+The test suite includes comprehensive coverage of all gRPC service implementations. When the proto file changes, the tests automatically catch any breaking changes or missing methods.
+
 ```bash
-npm run dev          # Start dev server
-npm run build        # Build for production
-npm test             # Run tests
+# Run all tests
+npm test
+
+# Run tests in watch mode (great for development)
+npm test -- --watch
+
+# Run a specific test file
+npm test -- src/grpc/client.test.ts
+
+# Generate coverage report
+npm test -- --coverage
+```
+
+**What's tested:**
+- All 5 gRPC services (Job, Network, Volume, Monitoring, Runtime)
+- 32 RPC methods across all services
+- Proto file compatibility and method signatures
+
+### Using the Makefile
+
+A Makefile is included for convenient task automation:
+
+```bash
+# Install dependencies
+make install
+
+# Start development server
+make dev
+
+# Build for production
+make build
+
+# Run tests
+make test
+
+# Clean build artifacts
+make clean
+
+# Full build cycle (clean, install, test, and build)
+make all
+```
+
+Run `make help` to see all available commands.
+
+### Project Structure
+
+```
+├── src/
+│   ├── grpc/           # gRPC client and proto handling
+│   ├── server/         # Express.js API server
+│   └── ui/             # React frontend
+├── proto/              # Protocol buffer definitions
+├── examples/           # Example workflows
+├── .github/workflows/  # CI/CD pipelines
+├── Makefile           # Build automation
+└── vitest.config.ts   # Test configuration
 ```
 
 ## License
