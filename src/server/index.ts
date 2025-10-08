@@ -12,6 +12,22 @@ const host = process.env.JOBLET_ADMIN_HOST || 'localhost';
 app.use(cors());
 app.use(express.json());
 
+// Node selection middleware - extracts node from query/body and sets it on gRPC client
+app.use((req, res, next) => {
+  try {
+    // Get node from query parameter or body
+    let node = req.query.node as string || req.body?.node || 'default';
+
+    // Set the node on the gRPC client for this request
+    grpcClient.setNode(node);
+
+    next();
+  } catch (error) {
+    console.error('Error setting node:', error);
+    next(); // Continue even if node setting fails
+  }
+});
+
 // Basic health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -482,11 +498,41 @@ app.delete('/api/runtimes/:name', async (req, res) => {
 // Node endpoints
 app.get('/api/nodes', async (req, res) => {
   try {
-    // For now, return a default node - this would typically come from gRPC
-    res.json([{ name: 'default', status: 'active' }]);
+    // Import required modules
+    const fs = await import('fs');
+    const pathModule = await import('path');
+    const os = await import('os');
+    const yaml = await import('yaml');
+
+    // Load config from ~/.rnx/rnx-config.yml
+    const configPath = process.env.JOBLET_CONFIG_PATH ||
+                      process.env.RNX_CONFIG_PATH ||
+                      pathModule.resolve(os.homedir(), '.rnx/rnx-config.yml');
+
+    if (!fs.existsSync(configPath)) {
+      // Return default node if config doesn't exist
+      return res.json([{ name: 'default', status: 'active' }]);
+    }
+
+    const configContent = fs.readFileSync(configPath, 'utf-8');
+    const config = yaml.parse(configContent);
+
+    // Extract nodes from config
+    const nodes = Object.keys(config.nodes || {}).map(nodeName => ({
+      name: nodeName,
+      status: 'active' // We assume all configured nodes are active
+    }));
+
+    // If no nodes found, return default
+    if (nodes.length === 0) {
+      return res.json([{ name: 'default', status: 'active' }]);
+    }
+
+    res.json(nodes);
   } catch (error) {
     console.error('Failed to list nodes:', error);
-    res.status(500).json({ error: 'Failed to list nodes' });
+    // Return default node on error
+    res.json([{ name: 'default', status: 'active' }]);
   }
 });
 
@@ -919,6 +965,14 @@ app.get('/api/system-info', async (req, res) => {
   try {
     const status = await grpcClient.getSystemStatus();
 
+    // Debug logging for network interfaces
+    console.log('Network data from gRPC:', {
+      networksCount: status.networks?.length || 0,
+      sampleNetwork: status.networks?.[0],
+      hostServerIPs: status.host?.serverIPs,
+      hostMacAddresses: status.host?.macAddresses,
+    });
+
     // Transform gRPC SystemStatusRes to DetailedSystemInfo format
     const systemInfo = {
       hostInfo: {
@@ -933,6 +987,13 @@ app.get('/api/system-info', async (req, res) => {
         nodeId: status.host?.nodeId,
         serverIPs: status.host?.serverIPs || [],
         macAddresses: status.host?.macAddresses || [],
+        // Joblet server version info - try both camelCase and snake_case
+        serverVersion: status.serverVersion?.version || status.server_version?.version,
+        gitCommit: status.serverVersion?.gitCommit || status.serverVersion?.git_commit || status.server_version?.gitCommit || status.server_version?.git_commit,
+        gitTag: status.serverVersion?.gitTag || status.serverVersion?.git_tag || status.server_version?.gitTag || status.server_version?.git_tag,
+        buildDate: status.serverVersion?.buildDate || status.serverVersion?.build_date || status.server_version?.buildDate || status.server_version?.build_date,
+        goVersion: status.serverVersion?.goVersion || status.serverVersion?.go_version || status.server_version?.goVersion || status.server_version?.go_version,
+        serverPlatform: status.serverVersion?.platform || status.server_version?.platform,
       },
       cpuInfo: {
         cores: status.cpu?.cores,
@@ -973,23 +1034,32 @@ app.get('/api/system-info', async (req, res) => {
         usedSpace: (status.disks || []).reduce((sum: number, disk: any) => sum + Number(disk.usedBytes || 0), 0),
       },
       networkInfo: {
-        interfaces: (status.networks || []).map((net: any) => ({
-          name: net.interface || '',
-          type: 'ethernet', // Not provided in proto
-          status: 'up', // Not provided in proto
-          speed: undefined,
-          mtu: undefined,
-          ipAddresses: [],
-          macAddress: undefined,
-          rxBytes: Number(net.bytesReceived || 0),
-          txBytes: Number(net.bytesSent || 0),
-          rxPackets: Number(net.packetsReceived || 0),
-          txPackets: Number(net.packetsSent || 0),
-          rxErrors: Number(net.errorsIn || 0),
-          txErrors: Number(net.errorsOut || 0),
-        })),
-        totalRxBytes: (status.networks || []).reduce((sum: number, net: any) => sum + Number(net.bytesReceived || 0), 0),
-        totalTxBytes: (status.networks || []).reduce((sum: number, net: any) => sum + Number(net.bytesSent || 0), 0),
+        interfaces: (status.networks || []).map((net: any) => {
+          // Try both camelCase and snake_case for field names
+          const ipAddresses = net.ipAddresses || net.ip_addresses || [];
+          const macAddress = net.macAddress || net.mac_address || undefined;
+
+          return {
+            name: net.interface || '',
+            type: 'ethernet', // Not provided in proto
+            status: 'up', // Not provided in proto
+            speed: undefined,
+            mtu: undefined,
+            ipAddresses: ipAddresses,
+            macAddress: macAddress,
+            rxBytes: Number(net.bytesReceived || net.bytes_received || 0),
+            txBytes: Number(net.bytesSent || net.bytes_sent || 0),
+            rxPackets: Number(net.packetsReceived || net.packets_received || 0),
+            txPackets: Number(net.packetsSent || net.packets_sent || 0),
+            rxErrors: Number(net.errorsIn || net.errors_in || 0),
+            txErrors: Number(net.errorsOut || net.errors_out || 0),
+          };
+        }),
+        totalRxBytes: (status.networks || []).reduce((sum: number, net: any) => sum + Number(net.bytesReceived || net.bytes_received || 0), 0),
+        totalTxBytes: (status.networks || []).reduce((sum: number, net: any) => sum + Number(net.bytesSent || net.bytes_sent || 0), 0),
+        // Add server-level IP and MAC info from HostInfo (try both camelCase and snake_case)
+        serverIPs: status.host?.serverIPs || status.host?.server_ips || [],
+        macAddresses: status.host?.macAddresses || status.host?.mac_addresses || [],
       },
       processesInfo: {
         processes: [
@@ -1048,6 +1118,9 @@ wss.on('connection', (ws, req) => {
     // Handle monitor stream
     const node = url.searchParams.get('node') || 'default';
     console.log(`Monitor stream connected for node: ${node}`);
+
+    // Set the node on gRPC client
+    grpcClient.setNode(node);
 
     // Send initial connection message
     ws.send(JSON.stringify({
@@ -1115,6 +1188,9 @@ wss.on('connection', (ws, req) => {
     const jobId = pathname.split('/ws/logs/')[1]?.split('?')[0];
     const node = url.searchParams.get('node') || 'default';
     console.log(`Log stream connected for job: ${jobId}, node: ${node}`);
+
+    // Set the node on gRPC client
+    grpcClient.setNode(node);
 
     // Send initial connection message
     ws.send(JSON.stringify({
@@ -1193,6 +1269,9 @@ wss.on('connection', (ws, req) => {
     const jobId = pathname.split('/ws/metrics/')[1]?.split('?')[0];
     const node = url.searchParams.get('node') || 'default';
     console.log(`Metrics stream connected for job: ${jobId}, node: ${node}`);
+
+    // Set the node on gRPC client
+    grpcClient.setNode(node);
 
     // Send initial connection message
     ws.send(JSON.stringify({

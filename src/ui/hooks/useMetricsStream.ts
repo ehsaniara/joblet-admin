@@ -1,4 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
+import {useApi} from './useApi';
 
 interface MetricPoint {
     jobId: string;
@@ -40,6 +41,7 @@ export const useMetricsStream = (jobId: string | null): UseMetricsStreamReturn =
     const [connected, setConnected] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
+    const {selectedNode} = useApi();
 
     const clearMetrics = useCallback(() => {
         setMetrics([]);
@@ -52,7 +54,11 @@ export const useMetricsStream = (jobId: string | null): UseMetricsStreamReturn =
             return;
         }
 
-        const wsUrl = `ws://${window.location.host}/ws/metrics/${jobId}`;
+        // Build WebSocket URL with node parameter
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
+        const wsUrl = `${protocol}//${host}/ws/metrics/${jobId}?node=${encodeURIComponent(selectedNode)}`;
+
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
@@ -94,7 +100,7 @@ export const useMetricsStream = (jobId: string | null): UseMetricsStreamReturn =
                 wsRef.current = null;
             }
         };
-    }, [jobId]);
+    }, [jobId, selectedNode]);
 
     return {
         metrics,

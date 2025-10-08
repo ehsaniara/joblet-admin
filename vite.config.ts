@@ -13,6 +13,10 @@ export default defineConfig({
             '@': path.resolve(__dirname, './src/ui'),
         },
     },
+    optimizeDeps: {
+        include: ['mermaid'],
+        exclude: [],
+    },
     server: {
         port: 3000,
         proxy: {
@@ -29,5 +33,12 @@ export default defineConfig({
     build: {
         outDir: 'dist',
         emptyOutDir: true,
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    'mermaid': ['mermaid'],
+                },
+            },
+        },
     },
 })

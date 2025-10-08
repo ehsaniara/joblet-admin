@@ -193,9 +193,18 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
                         <div>
                             <p className="font-medium">Job Metrics Not Available</p>
                             <p className="text-sm mt-1">
-                                Per-job performance metrics are not currently collected by the Joblet server.
+                                Metrics are currently unavailable for this job. This can happen when:
                             </p>
-                            <p className="text-sm mt-2">
+                            <ul className="text-sm mt-2 list-disc list-inside space-y-1">
+                                <li>The job hasn't started running yet (queued or pending)</li>
+                                <li>The job has already completed or failed</li>
+                                <li>The job is a workflow job that hasn't been executed</li>
+                                <li>Metrics collection is not enabled on the Joblet server</li>
+                                <li className="text-yellow-700 dark:text-yellow-300">
+                                    <strong>You may be connected to the wrong node</strong> - Check the node selector in the sidebar
+                                </li>
+                            </ul>
+                            <p className="text-sm mt-3">
                                 <strong>What you can monitor instead:</strong>
                             </p>
                             <ul className="text-sm mt-1 list-disc list-inside space-y-1">
@@ -203,6 +212,9 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
                                 <li>Job details show duration, exit code, and status</li>
                                 <li>System-wide metrics are available in the "Monitoring" page</li>
                             </ul>
+                            <p className="text-sm mt-3 text-gray-600 dark:text-gray-400">
+                                Connected to node: <strong className="font-mono">{connected ? 'Live stream active' : usingFallback ? 'Using fallback' : 'Connecting...'}</strong>
+                            </p>
                         </div>
                     </div>
                 </div>

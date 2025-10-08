@@ -88,6 +88,108 @@ export const JobDetail: React.FC<JobDetailProps> = ({
         }
     };
 
+    const generateRnxCommand = (job: Job): string => {
+        let command = 'rnx job run';
+
+        // Add command and args
+        if (job.command) {
+            command += ` ${job.command}`;
+            if (job.args && job.args.length > 0) {
+                command += ` ${job.args.join(' ')}`;
+            }
+        }
+
+        // Add runtime
+        if (job.runtime) {
+            command += ` \\\n  --runtime ${job.runtime}`;
+        }
+
+        // Add CPU limits (correct flag: --max-cpu)
+        if (job.maxCPU !== undefined && job.maxCPU > 0) {
+            command += ` \\\n  --max-cpu ${job.maxCPU}`;
+        }
+
+        // Add CPU cores
+        if (job.cpuCores) {
+            command += ` \\\n  --cpu-cores ${job.cpuCores}`;
+        }
+
+        // Add memory limit (correct flag: --max-memory)
+        if (job.maxMemory !== undefined && job.maxMemory > 0) {
+            command += ` \\\n  --max-memory ${job.maxMemory}`;
+        }
+
+        // Add IO limit (correct flag: --max-iobps)
+        if (job.maxIOBPS !== undefined && job.maxIOBPS > 0) {
+            command += ` \\\n  --max-iobps ${job.maxIOBPS}`;
+        }
+
+        // Add GPU settings
+        if (job.gpuCount !== undefined && job.gpuCount > 0) {
+            command += ` \\\n  --gpu ${job.gpuCount}`;
+        }
+
+        if (job.gpuMemoryMb !== undefined && job.gpuMemoryMb > 0) {
+            command += ` \\\n  --gpu-memory ${job.gpuMemoryMb}MB`;
+        }
+
+        // Add network
+        if (job.network) {
+            command += ` \\\n  --network ${job.network}`;
+        }
+
+        // Add volumes
+        if (job.volumes && job.volumes.length > 0) {
+            job.volumes.forEach(volume => {
+                command += ` \\\n  --volume ${volume}`;
+            });
+        }
+
+        // Add uploads (files)
+        if (job.uploads && job.uploads.length > 0) {
+            job.uploads.forEach(file => {
+                command += ` \\\n  --upload ${file}`;
+            });
+        }
+
+        // Add upload directories
+        if (job.uploadDirs && job.uploadDirs.length > 0) {
+            job.uploadDirs.forEach(dir => {
+                command += ` \\\n  --upload-dir ${dir}`;
+            });
+        }
+
+        // Add environment variables (use --env or -e)
+        if (job.envVars && Object.keys(job.envVars).length > 0) {
+            Object.entries(job.envVars).forEach(([key, value]) => {
+                command += ` \\\n  -e ${key}="${value}"`;
+            });
+        }
+
+        // Add secret environment variables (use --secret-env or -s)
+        if (job.secretEnvVars && Object.keys(job.secretEnvVars).length > 0) {
+            Object.entries(job.secretEnvVars).forEach(([key, value]) => {
+                command += ` \\\n  -s ${key}="${value}"`;
+            });
+        }
+
+        // Add scheduled time
+        if (job.scheduledTime) {
+            command += ` \\\n  --schedule "${job.scheduledTime}"`;
+        }
+
+        return command;
+    };
+
+    const copyToClipboard = (text: string) => {
+        navigator.clipboard.writeText(text).then(() => {
+            // Could add a toast notification here
+            console.log('Command copied to clipboard');
+        }).catch(err => {
+            console.error('Failed to copy to clipboard:', err);
+        });
+    };
+
     return (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
             <div className="relative top-16 mx-auto p-5 border w-11/12 max-w-[90vw] min-h-[80vh] shadow-lg rounded-md bg-white dark:bg-gray-800">
@@ -290,6 +392,31 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                                                 </div>
                                             )}
                                         </dl>
+                                    </div>
+
+                                    {/* RNX Command Preview */}
+                                    <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h4 className="text-lg font-medium text-gray-900 dark:text-white">RNX Command Preview</h4>
+                                            <button
+                                                onClick={() => copyToClipboard(generateRnxCommand(selectedJob))}
+                                                className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center space-x-1"
+                                                title="Copy to clipboard"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                </svg>
+                                                <span>Copy</span>
+                                            </button>
+                                        </div>
+                                        <div className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto">
+                                            <pre className="font-mono text-sm whitespace-pre-wrap break-words">
+                                                {generateRnxCommand(selectedJob)}
+                                            </pre>
+                                        </div>
+                                        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                            This command can be used to recreate this job via the RNX CLI
+                                        </p>
                                     </div>
 
                                     {/* Resource Limits */}

@@ -387,6 +387,8 @@ message NetworkMetrics {
   int64 dropsOut = 9;
   double receiveRate = 10; // bytes/sec
   double transmitRate = 11; // bytes/sec
+  repeated string ipAddresses = 12; // IP addresses assigned to this interface (e.g., ["192.168.1.10", "fe80::1"])
+  string macAddress = 13; // Hardware MAC address (e.g., "00:1a:2b:3c:4d:5e")
 }
 
 message IOMetrics {

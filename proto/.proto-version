@@ -2,9 +2,9 @@
 # This file tracks the version of joblet-proto currently in use
 
 PROTO_SOURCE=https://github.com/ehsaniara/joblet-proto
-PROTO_VERSION=v1.0.8
-LAST_UPDATED=2025-10-06
-UPDATED_BY=metrics-update
+PROTO_VERSION=v1.0.9
+LAST_UPDATED=2025-10-08
+UPDATED_BY=network-interface-update
 
 # Usage:
 # npm run sync-proto    - Download latest from GitHub

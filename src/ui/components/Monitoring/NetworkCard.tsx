@@ -19,10 +19,20 @@ interface NetworkCardProps {
         }>;
         totalRxBytes?: number;
         totalTxBytes?: number;
+        serverIPs?: string[];
+        macAddresses?: string[];
     };
 }
 
 const NetworkCard: React.FC<NetworkCardProps> = ({networkInfo}) => {
+    // Debug logging
+    console.log('NetworkCard received:', {
+        interfacesCount: networkInfo.interfaces?.length,
+        firstInterface: networkInfo.interfaces?.[0],
+        serverIPs: networkInfo.serverIPs,
+        macAddresses: networkInfo.macAddresses
+    });
+
     const formatBytes = (bytes: number) => {
         if (bytes === 0) return '0 B';
         const k = 1024;
@@ -61,6 +71,38 @@ const NetworkCard: React.FC<NetworkCardProps> = ({networkInfo}) => {
                 <h3 className="text-lg font-semibold text-white">Network Interfaces</h3>
             </div>
 
+            {/* Server-level Network Summary */}
+            {(networkInfo.serverIPs && networkInfo.serverIPs.length > 0) || (networkInfo.macAddresses && networkInfo.macAddresses.length > 0) ? (
+                <div className="mb-4 p-4 bg-gray-700 border border-gray-600 rounded-lg">
+                    <h4 className="text-sm font-semibold text-gray-300 mb-3">Server Network Summary</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {networkInfo.serverIPs && networkInfo.serverIPs.length > 0 && (
+                            <div>
+                                <span className="text-xs text-gray-400 uppercase tracking-wider">All IP Addresses</span>
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                    {networkInfo.serverIPs.map((ip, idx) => (
+                                        <div key={idx} className="text-xs font-mono text-white bg-gray-800 px-2 py-0.5 rounded">
+                                            {ip}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {networkInfo.macAddresses && networkInfo.macAddresses.length > 0 && (
+                            <div>
+                                <span className="text-xs text-gray-400 uppercase tracking-wider">All MAC Addresses</span>
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                    {networkInfo.macAddresses.map((mac, idx) => (
+                                        <div key={idx} className="text-xs font-mono text-white bg-gray-800 px-2 py-0.5 rounded">
+                                            {mac}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            ) : null}
 
             <div className="space-y-4">
                 {networkInfo.interfaces && networkInfo.interfaces.length > 0 ? (
@@ -86,15 +128,29 @@ const NetworkCard: React.FC<NetworkCardProps> = ({networkInfo}) => {
                                 <div>
                                     <span className="text-gray-400">IP Addresses</span>
                                     <div className="font-medium text-white">
-                                        {iface.ipAddresses && iface.ipAddresses.length > 0
-                                            ? iface.ipAddresses.join(', ')
-                                            : 'None'}
+                                        {iface.ipAddresses && iface.ipAddresses.length > 0 ? (
+                                            <div className="space-y-1">
+                                                {iface.ipAddresses.map((ip, idx) => (
+                                                    <div key={idx} className="font-mono text-sm bg-gray-700 px-2 py-0.5 rounded inline-block mr-1">
+                                                        {ip}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <span className="text-gray-500 text-xs italic">Not available</span>
+                                        )}
                                     </div>
                                 </div>
                                 <div>
                                     <span className="text-gray-400">MAC Address</span>
                                     <div className="font-medium text-white">
-                                        {iface.macAddress || 'Unknown'}
+                                        {iface.macAddress ? (
+                                            <div className="font-mono text-sm bg-gray-700 px-2 py-0.5 rounded inline-block">
+                                                {iface.macAddress}
+                                            </div>
+                                        ) : (
+                                            <span className="text-gray-500 text-xs italic">Not available</span>
+                                        )}
                                     </div>
                                 </div>
                                 {iface.speed && (

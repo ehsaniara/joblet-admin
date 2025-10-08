@@ -573,7 +573,16 @@ export class JobletGrpcClient {
 
         client.GetSystemStatus({}, { deadline }, (error: any, response: any) => {
           if (error) reject(error);
-          else resolve(response);
+          else {
+            // Debug: Log network data from gRPC response
+            console.log('[gRPC Client] Raw network data:', {
+              networksCount: response.networks?.length || 0,
+              firstNetwork: response.networks?.[0],
+              hostServerIPs: response.host?.serverIPs || response.host?.server_ips,
+              hostMacAddresses: response.host?.macAddresses || response.host?.mac_addresses,
+            });
+            resolve(response);
+          }
         });
       });
     });
