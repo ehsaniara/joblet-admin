@@ -12,6 +12,14 @@ npm install
 npm run dev
 ```
 
+## 📚 Documentation
+
+Comprehensive guides to help you get started:
+
+- **[Quick Start Guide](docs/QUICK_START.md)** - Get running in under 5 minutes
+- **[Setup Guide](docs/SETUP_GUIDE.md)** - Detailed installation and configuration
+- **[Configuration Guide](docs/CONFIGURATION.md)** - Complete config reference and examples
+
 ## Features
 
 - 📊 **Dashboard** - Real-time system metrics and job overview
@@ -43,20 +51,31 @@ npm install
 npm run dev
 ```
 
+📖 For detailed installation steps and troubleshooting, see the **[Setup Guide](docs/SETUP_GUIDE.md)**.
+
 ## Configuration
 
-Set environment variables or create `~/.rnx/rnx-config.yml`:
+The admin UI reads configuration from `~/.rnx/rnx-config.yml`:
+
+```yaml
+version: "3.0"
+nodes:
+  default:
+    address: "localhost:50051"
+    cert: ""
+    key: ""
+    ca: ""
+```
+
+Optional environment variables:
 
 ```bash
-# Server settings
 JOBLET_ADMIN_PORT=5175        # Admin UI port (default: 5175)
 JOBLET_ADMIN_HOST=localhost   # Admin UI host (default: localhost)
-
-# Joblet server connection
-JOBLET_SERVER_HOST=localhost  # Joblet server host (default: localhost)
-JOBLET_SERVER_PORT=50051      # Joblet gRPC port (default: 50051)
 JOBLET_NODE=default           # Node to connect to (default: default)
 ```
+
+📖 For detailed configuration including mTLS setup and multi-node configurations, see the **[Configuration Guide](docs/CONFIGURATION.md)**.
 
 ## Usage
 
@@ -153,11 +172,24 @@ Run `make help` to see all available commands.
 │   ├── server/         # Express.js API server
 │   └── ui/             # React frontend
 ├── proto/              # Protocol buffer definitions
+├── docs/               # Documentation
 ├── examples/           # Example workflows
 ├── .github/workflows/  # CI/CD pipelines
 ├── Makefile           # Build automation
 └── vitest.config.ts   # Test configuration
 ```
+
+## Troubleshooting
+
+Having issues? Check these resources:
+
+- **[Setup Guide - Troubleshooting](docs/SETUP_GUIDE.md#troubleshooting)** - Common problems and solutions
+- **[Configuration Guide - Troubleshooting](docs/CONFIGURATION.md#troubleshooting-configuration-issues)** - Config-specific issues
+- **[GitHub Issues](https://github.com/ehsaniara/joblet-admin/issues)** - Report bugs or request features
+
+## Contributing
+
+We welcome contributions! Please check the [Setup Guide](docs/SETUP_GUIDE.md#development-workflow) for development workflow and coding standards.
 
 ## License
 
