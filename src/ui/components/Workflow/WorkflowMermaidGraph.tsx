@@ -63,7 +63,7 @@ const WorkflowMermaidGraph: React.FC<WorkflowMermaidGraphProps> = ({
                 const sanitizedName = jobName.replace(/[^a-zA-Z0-9]/g, '_');
 
                 if (job.dependsOn && job.dependsOn.length > 0) {
-                    job.dependsOn.forEach(dep => {
+                    job.dependsOn.forEach((dep: string) => {
                         const depJob = jobs.find(j => j.name === dep || j.id === dep);
                         if (depJob) {
                             const depName = depJob.name || depJob.id || 'unknown';

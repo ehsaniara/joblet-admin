@@ -21,10 +21,15 @@
     "rootDir": "./src",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
+      "@/*": ["src/ui/*"],
       "@/grpc/*": ["src/grpc/*"],
       "@/server/*": ["src/server/*"],
-      "@/ui/*": ["src/ui/*"]
+      "@/ui/*": ["src/ui/*"],
+      "@/types": ["src/ui/types"],
+      "@/services/*": ["src/ui/services/*"],
+      "@/hooks/*": ["src/ui/hooks/*"],
+      "@/components/*": ["src/ui/components/*"],
+      "@/pages/*": ["src/ui/pages/*"]
     }
   },
   "include": ["src/**/*"],
