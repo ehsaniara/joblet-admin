@@ -71,39 +71,6 @@ const NetworkCard: React.FC<NetworkCardProps> = ({networkInfo}) => {
                 <h3 className="text-lg font-semibold text-white">Network Interfaces</h3>
             </div>
 
-            {/* Server-level Network Summary */}
-            {(networkInfo.serverIPs && networkInfo.serverIPs.length > 0) || (networkInfo.macAddresses && networkInfo.macAddresses.length > 0) ? (
-                <div className="mb-4 p-4 bg-gray-700 border border-gray-600 rounded-lg">
-                    <h4 className="text-sm font-semibold text-gray-300 mb-3">Server Network Summary</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {networkInfo.serverIPs && networkInfo.serverIPs.length > 0 && (
-                            <div>
-                                <span className="text-xs text-gray-400 uppercase tracking-wider">All IP Addresses</span>
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                    {networkInfo.serverIPs.map((ip, idx) => (
-                                        <div key={idx} className="text-xs font-mono text-white bg-gray-800 px-2 py-0.5 rounded">
-                                            {ip}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                        {networkInfo.macAddresses && networkInfo.macAddresses.length > 0 && (
-                            <div>
-                                <span className="text-xs text-gray-400 uppercase tracking-wider">All MAC Addresses</span>
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                    {networkInfo.macAddresses.map((mac, idx) => (
-                                        <div key={idx} className="text-xs font-mono text-white bg-gray-800 px-2 py-0.5 rounded">
-                                            {mac}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            ) : null}
-
             <div className="space-y-4">
                 {networkInfo.interfaces && networkInfo.interfaces.length > 0 ? (
                     networkInfo.interfaces.map((iface, index) => (
