@@ -893,7 +893,7 @@ app.get('/api/workflows/:workflowId/jobs', async (req, res) => {
   }
 });
 
-// Get job logs endpoint
+// Get job logs endpoint - fetches logs from job service
 app.get('/api/jobs/:jobId/logs', async (req, res) => {
   const { jobId } = req.params;
   try {
@@ -902,20 +902,22 @@ app.get('/api/jobs/:jobId/logs', async (req, res) => {
     const logs: string[] = [];
     const stream = grpcClient.getJobLogs(jobId);
 
-    stream.on('data', (chunk: any) => {
-      if (chunk.payload) {
-        const logLine = Buffer.from(chunk.payload).toString('utf-8');
-        logs.push(logLine);
+    stream.on('data', (logLine: any) => {
+      if (logLine.content) {
+        const logText = Buffer.from(logLine.content).toString('utf-8');
+        logs.push(logText);
       }
     });
 
     stream.on('end', () => {
+      console.log(`Retrieved ${logs.length} log lines for job: ${jobId}`);
       res.json({ logs });
     });
 
     stream.on('error', (error: any) => {
       console.error(`Failed to get logs for ${jobId}:`, error);
-      res.status(500).json({ error: 'Failed to get job logs', details: error.message });
+      // Return empty logs instead of error for better user experience
+      res.json({ logs: [] });
     });
   } catch (error) {
     console.error(`Failed to get logs for ${jobId}:`, error);
@@ -923,17 +925,100 @@ app.get('/api/jobs/:jobId/logs', async (req, res) => {
   }
 });
 
-// Get job metrics endpoint
+// Get job metrics endpoint - fetches metrics from job service
 app.get('/api/jobs/:jobId/metrics', async (req, res) => {
   const { jobId } = req.params;
+  let responseSent = false; // Track if response was already sent
+
   try {
     console.log(`Getting metrics for job: ${jobId}`);
-    // For now, return empty metrics array
-    // TODO: Implement actual metrics fetching from gRPC if available
-    res.json([]);
+
+    // First, check if the job is completed
+    let jobStatus = null;
+    try {
+      const jobs = await grpcClient.listJobs();
+      const job = jobs?.jobs?.find((j: any) => j.id === jobId || j.uuid === jobId);
+      jobStatus = job?.status;
+      console.log(`Job ${jobId} status: ${jobStatus}`);
+    } catch (err) {
+      console.warn(`Could not determine job status for ${jobId}:`, err);
+      // Continue anyway, try to get metrics
+    }
+
+    // For completed/failed jobs, metrics are typically not available anymore
+    // unless a persist service is configured
+    if (jobStatus === 'COMPLETED' || jobStatus === 'FAILED' || jobStatus === 'CANCELLED') {
+      console.log(`Job ${jobId} is ${jobStatus}. Metrics are not retained after job completion.`);
+      console.log(`Note: Historical metrics require a separate persist service to be configured.`);
+      // Return empty array - the UI will show an appropriate message
+      return res.json([]);
+    }
+
+    try {
+      const metrics: any[] = [];
+      const stream = grpcClient.streamJobMetrics(jobId);
+
+      stream.on('data', (metric: any) => {
+        // Handle the new protobuf structure (JobMetricsSample)
+        if (metric.cpu || metric.memory || metric.io) {
+          metrics.push({
+            jobId: metric.jobId || jobId,
+            timestamp: metric.timestamp ? Number(metric.timestamp) : Date.now() / 1000,
+            sampleIntervalSeconds: metric.sampleIntervalSeconds || 5,
+            cpu: {
+              usage: metric.cpu?.usagePercent || 0,
+              usagePercent: metric.cpu?.usagePercent || 0,
+            },
+            memory: {
+              current: metric.memory?.current || 0,
+              limit: metric.memory?.max || 0,
+            },
+            io: {
+              readBytes: metric.io?.totalReadBytes || 0,
+              writeBytes: metric.io?.totalWriteBytes || 0,
+              totalReadBytes: metric.io?.totalReadBytes || 0,
+              totalWriteBytes: metric.io?.totalWriteBytes || 0,
+            },
+            network: {
+              rxBytes: metric.network?.totalRxBytes || 0,
+              txBytes: metric.network?.totalTxBytes || 0,
+            },
+            process: metric.process || {},
+            limits: metric.limits || {},
+          });
+        }
+      });
+
+      stream.on('end', () => {
+        if (!responseSent) {
+          responseSent = true;
+          console.log(`Retrieved ${metrics.length} metrics for job: ${jobId}`);
+          res.json(metrics);
+        }
+      });
+
+      stream.on('error', (error: any) => {
+        if (!responseSent) {
+          responseSent = true;
+          console.error(`Failed to get metrics for ${jobId}:`, error);
+
+          // Return empty array - the UI will show an appropriate message
+          res.json([]);
+        }
+      });
+    } catch (error: any) {
+      if (!responseSent) {
+        responseSent = true;
+        console.error(`Failed to stream metrics for ${jobId}:`, error);
+        res.json([]);
+      }
+    }
   } catch (error) {
-    console.error(`Failed to get metrics for ${jobId}:`, error);
-    res.status(500).json({ error: 'Failed to get job metrics', details: error instanceof Error ? error.message : 'Unknown error' });
+    if (!responseSent) {
+      responseSent = true;
+      console.error(`Failed to get metrics for ${jobId}:`, error);
+      res.status(500).json({ error: 'Failed to get job metrics', details: error instanceof Error ? error.message : 'Unknown error' });
+    }
   }
 });
 
@@ -1206,8 +1291,10 @@ wss.on('connection', (ws, req) => {
 
       stream.on('data', (chunk: any) => {
         hasReceivedData = true;
-        if (ws.readyState === ws.OPEN && chunk.payload) {
-          const logLine = Buffer.from(chunk.payload).toString('utf-8');
+        // Check both 'content' and 'payload' for compatibility
+        const logData = chunk.content || chunk.payload;
+        if (ws.readyState === ws.OPEN && logData) {
+          const logLine = Buffer.from(logData).toString('utf-8');
           ws.send(JSON.stringify({
             type: 'log',
             data: logLine,

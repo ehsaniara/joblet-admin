@@ -47,6 +47,7 @@ export interface RnxConfig {
   nodes: {
     [key: string]: {
       address: string;
+      persistAddress?: string;  // Optional separate address for persist service
       cert: string;
       key: string;
       ca: string;
@@ -79,10 +80,10 @@ export class JobletGrpcClient {
   }
 
   private loadProtobuf() {
-    // Use local proto files since joblet-proto package doesn't exist
-    const protoPath = resolve(process.cwd(), 'proto/joblet.proto');
+    // Use local proto files
+    const jobletProtoPath = resolve(process.cwd(), 'proto/joblet.proto');
 
-    const packageDefinition = protoLoader.loadSync(protoPath, {
+    const jobletPackageDef = protoLoader.loadSync(jobletProtoPath, {
       keepCase: true,
       longs: String,
       enums: String,
@@ -90,14 +91,14 @@ export class JobletGrpcClient {
       oneofs: true,
     });
 
-    const proto = grpc.loadPackageDefinition(packageDefinition) as any;
+    const jobletProto = grpc.loadPackageDefinition(jobletPackageDef) as any;
 
     // Initialize service constructors
-    this.jobService = proto.joblet.JobService;
-    this.networkService = proto.joblet.NetworkService;
-    this.volumeService = proto.joblet.VolumeService;
-    this.monitoringService = proto.joblet.MonitoringService;
-    this.runtimeService = proto.joblet.RuntimeService;
+    this.jobService = jobletProto.joblet.JobService;
+    this.networkService = jobletProto.joblet.NetworkService;
+    this.volumeService = jobletProto.joblet.VolumeService;
+    this.monitoringService = jobletProto.joblet.MonitoringService;
+    this.runtimeService = jobletProto.joblet.RuntimeService;
   }
 
   private loadRnxConfig(): RnxConfig {
@@ -379,7 +380,7 @@ export class JobletGrpcClient {
 
   public streamJobMetrics(jobId: string): grpc.ClientReadableStream<any> {
     const client = this.getClient(this.jobService);
-    return client.StreamJobMetrics({ uuid: jobId });
+    return client.GetJobMetrics({ uuid: jobId });
   }
 
   // Workflow Service methods
@@ -674,19 +675,6 @@ export class JobletGrpcClient {
         });
       });
     });
-  }
-
-  // Cleanup method to close all connections
-  public close(): void {
-    Object.keys(this.clientCache).forEach(key => {
-      try {
-        this.clientCache[key]?.close?.();
-      } catch (e) {
-        // Ignore close errors
-      }
-    });
-    this.clientCache = {};
-    this.credentials = undefined;
   }
 }
 

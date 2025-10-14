@@ -85,20 +85,20 @@ export interface JobConfig {
 export interface JobExecuteRequest {
     command: string;
     args?: string[];
-    maxCPU?: number;
+    maxCpu?: number;
     maxMemory?: number;
-    maxIOBPS?: number;
+    maxIobps?: number;
     cpuCores?: string;
     runtime?: string;
     network?: string;
     volumes?: string[];
     uploads?: string[];
     uploadDirs?: string[];
-    envVars?: Record<string, string>;
-    secretEnvVars?: Record<string, string>;
+    environment?: Record<string, string>;
+    secret_environment?: Record<string, string>;
     schedule?: string;
-    gpuCount?: number;
-    gpuMemoryMb?: number;
+    gpu_count?: number;
+    gpu_memory_mb?: number;
 }
 
 export interface JobFlag {

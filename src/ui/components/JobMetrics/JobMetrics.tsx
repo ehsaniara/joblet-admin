@@ -115,6 +115,7 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
     const prepareChartData = () => {
         return currentMetrics.map((metric, index) => ({
             time: formatDuration(metric.timestamp),
+            timestamp: metric.timestamp,
             timeIndex: index,
             cpuUsage: metric.cpu?.usagePercent || metric.cpu?.usage || 0,
             memoryMB: metric.memory?.current ? (metric.memory.current / (1024 * 1024)) : 0,
@@ -125,6 +126,27 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
     };
 
     const chartData = prepareChartData();
+
+    // Custom tooltip component with timestamp
+    const CustomTooltip = ({ active, payload, label }: any) => {
+        if (active && payload && payload.length) {
+            const data = payload[0].payload;
+            return (
+                <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg p-3">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 border-b pb-1">
+                        <Clock className="h-3 w-3 inline mr-1" />
+                        {data.time}
+                    </p>
+                    {payload.map((entry: any, index: number) => (
+                        <p key={index} className="text-sm font-medium" style={{ color: entry.color }}>
+                            {entry.name}: {entry.value.toFixed(2)}{entry.unit || ''}
+                        </p>
+                    ))}
+                </div>
+            );
+        }
+        return null;
+    };
 
     // Calculate performance statistics
     const calculateStats = () => {
@@ -197,13 +219,17 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
                             </p>
                             <ul className="text-sm mt-2 list-disc list-inside space-y-1">
                                 <li>The job hasn't started running yet (queued or pending)</li>
-                                <li>The job has already completed or failed</li>
+                                <li><strong>The job has already completed, failed, or was cancelled</strong> - Metrics are only retained while jobs are running</li>
                                 <li>The job is a workflow job that hasn't been executed</li>
                                 <li>Metrics collection is not enabled on the Joblet server</li>
                                 <li className="text-yellow-700 dark:text-yellow-300">
                                     <strong>You may be connected to the wrong node</strong> - Check the node selector in the sidebar
                                 </li>
                             </ul>
+                            <p className="text-sm mt-3 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded p-2">
+                                <strong>💡 Tip:</strong> To view metrics for completed jobs, you need to configure a separate
+                                <strong> Joblet Persist Service</strong> which stores historical metrics and logs.
+                            </p>
                             <p className="text-sm mt-3">
                                 <strong>What you can monitor instead:</strong>
                             </p>
@@ -211,9 +237,10 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
                                 <li>Job logs in the "Logs" tab show execution output</li>
                                 <li>Job details show duration, exit code, and status</li>
                                 <li>System-wide metrics are available in the "Monitoring" page</li>
+                                <li>For running jobs, metrics update in real-time</li>
                             </ul>
                             <p className="text-sm mt-3 text-gray-600 dark:text-gray-400">
-                                Connected to node: <strong className="font-mono">{connected ? 'Live stream active' : usingFallback ? 'Using fallback' : 'Connecting...'}</strong>
+                                Connection status: <strong className="font-mono">{connected ? 'Live stream active' : usingFallback ? 'Using fallback' : 'Connecting...'}</strong>
                             </p>
                         </div>
                     </div>
@@ -349,10 +376,7 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
                                             tick={{ fontSize: 12 }}
                                             label={{ value: 'CPU %', angle: -90, position: 'insideLeft' }}
                                         />
-                                        <Tooltip
-                                            labelFormatter={(index) => `Sample ${(index as number) + 1}`}
-                                            formatter={(value: any) => [`${value}%`, 'CPU Usage']}
-                                        />
+                                        <Tooltip content={<CustomTooltip />} />
                                         <Area
                                             type="monotone"
                                             dataKey="cpuUsage"
@@ -384,10 +408,7 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
                                             tick={{ fontSize: 12 }}
                                             label={{ value: 'MB', angle: -90, position: 'insideLeft' }}
                                         />
-                                        <Tooltip
-                                            labelFormatter={(index) => `Sample ${(index as number) + 1}`}
-                                            formatter={(value: any) => [`${value.toFixed(2)} MB`, 'Memory Usage']}
-                                        />
+                                        <Tooltip content={<CustomTooltip />} />
                                         <Area
                                             type="monotone"
                                             dataKey="memoryMB"
@@ -419,13 +440,7 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
                                             tick={{ fontSize: 12 }}
                                             label={{ value: 'MB', angle: -90, position: 'insideLeft' }}
                                         />
-                                        <Tooltip
-                                            labelFormatter={(index) => `Sample ${(index as number) + 1}`}
-                                            formatter={(value: any, name: string) => [
-                                                `${value.toFixed(2)} MB`,
-                                                name === 'diskReadMB' ? 'Read' : 'Write'
-                                            ]}
-                                        />
+                                        <Tooltip content={<CustomTooltip />} />
                                         <Line
                                             type="monotone"
                                             dataKey="diskReadMB"

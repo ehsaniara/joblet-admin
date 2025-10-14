@@ -314,9 +314,9 @@ export const SimpleJobBuilder: React.FC<SimpleJobBuilderProps> = ({
             return;
         }
 
-        // Validate CPU limit (must be 0 or >= 10)
-        if (config.maxCpu > 0 && config.maxCpu < 10) {
-            alert('CPU limit must be either 0 (unlimited) or at least 10%');
+        // Validate CPU limit (must be 0 or >= 1)
+        if (config.maxCpu > 0 && config.maxCpu < 1) {
+            alert('CPU limit must be either 0 (unlimited) or at least 1%');
             return;
         }
 
@@ -327,28 +327,79 @@ export const SimpleJobBuilder: React.FC<SimpleJobBuilderProps> = ({
         }
 
         try {
-            // Parse command into command and args (like shell does)
-            const commandParts = config.command.trim().split(/\s+/);
-            const command = commandParts[0];
-            const args = commandParts.slice(1);
+            // Parse command into command and args, respecting quoted strings
+            const parseCommand = (input: string): { command: string; args: string[] } => {
+                const trimmed = input.trim();
+                const parts: string[] = [];
+                let current = '';
+                let inQuote: string | null = null;
+                let escaped = false;
+
+                for (let i = 0; i < trimmed.length; i++) {
+                    const char = trimmed[i];
+
+                    if (escaped) {
+                        current += char;
+                        escaped = false;
+                        continue;
+                    }
+
+                    if (char === '\\') {
+                        escaped = true;
+                        continue;
+                    }
+
+                    if (char === '"' || char === "'") {
+                        if (inQuote === char) {
+                            inQuote = null;
+                        } else if (inQuote === null) {
+                            inQuote = char;
+                        } else {
+                            current += char;
+                        }
+                        continue;
+                    }
+
+                    if (char === ' ' && inQuote === null) {
+                        if (current) {
+                            parts.push(current);
+                            current = '';
+                        }
+                        continue;
+                    }
+
+                    current += char;
+                }
+
+                if (current) {
+                    parts.push(current);
+                }
+
+                return {
+                    command: parts[0] || '',
+                    args: parts.slice(1)
+                };
+            };
+
+            const { command, args } = parseCommand(config.command);
 
             const request: JobExecuteRequest = {
                 command: command,
                 args: args.length > 0 ? args : undefined,
-                maxCPU: config.maxCpu || undefined,
+                maxCpu: config.maxCpu || undefined,
                 maxMemory: config.maxMemory || undefined,
-                maxIOBPS: config.maxIobps || undefined,
+                maxIobps: config.maxIobps || undefined,
                 cpuCores: config.cpuCores || undefined,
                 runtime: config.runtime || undefined,
                 network: config.network,
                 volumes: config.volumes,
                 uploads: config.files, // These are now actual file paths from upload handler
                 uploadDirs: config.directories, // These are now actual directory paths
-                envVars: config.envVars,
-                secretEnvVars: config.secretEnvVars,
+                environment: config.envVars,
+                secret_environment: config.secretEnvVars,
                 schedule: config.schedule || undefined,
-                gpuCount: config.gpuCount || undefined,
-                gpuMemoryMb: config.gpuMemoryMb || undefined
+                gpu_count: config.gpuCount || undefined,
+                gpu_memory_mb: config.gpuMemoryMb || undefined
             };
 
             const jobId = await executeJob(request);
@@ -563,7 +614,7 @@ export const SimpleJobBuilder: React.FC<SimpleJobBuilderProps> = ({
                                         min="0"
                                     />
                                     <p className="mt-1 text-xs text-gray-500">
-                                        CPU limit as percentage (200% = 2 cores). Minimum: 10% or 0 (unlimited)
+                                        CPU limit as percentage (200% = 2 cores). Minimum: 1% or 0 (unlimited)
                                     </p>
                                 </div>
 

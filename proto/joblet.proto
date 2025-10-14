@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "joblet/api/gen";
+option go_package = "github.com/ehsaniara/joblet/api/gen";
 
 package joblet;
 
@@ -16,9 +16,8 @@ service JobService {
   rpc GetJobLogs(GetJobLogsReq) returns (stream DataChunk);
   rpc ListJobs(EmptyRequest) returns (Jobs){}
 
-  // Job metrics operations
-  rpc StreamJobMetrics(JobMetricsRequest) returns (stream JobMetricsSample){}
-  rpc GetJobMetricsHistory(JobMetricsHistoryRequest) returns (JobMetricsHistoryResponse){}
+  // Job metrics operations (live streaming only - historical metrics via persist.QueryMetrics)
+  rpc GetJobMetrics(JobMetricsRequest) returns (stream JobMetricsSample){}
   rpc GetJobMetricsSummary(JobMetricsSummaryRequest) returns (JobMetricsSummaryResponse){}
 
   // Workflow operations
@@ -678,15 +677,7 @@ message JobMetricsRequest {
   string uuid = 1;                 // Job UUID identifier
 }
 
-message JobMetricsHistoryRequest {
-  string uuid = 1;                 // Job UUID identifier
-  int64 fromTimestamp = 2;         // Start timestamp (Unix seconds)
-  int64 toTimestamp = 3;           // End timestamp (Unix seconds)
-}
-
-message JobMetricsHistoryResponse {
-  repeated JobMetricsSample samples = 1;
-}
+// Use persist.QueryMetrics for historical metrics instead of GetJobMetricsHistory
 
 message JobMetricsSummaryRequest {
   string uuid = 1;                 // Job UUID identifier
