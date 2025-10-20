@@ -13,6 +13,7 @@ export class CommandBuilder {
             .setResource('memory', config.maxMemory)
             .setResource('cores', config.cpuCores)
             .setResource('io', config.maxIobps)
+            .setGPU(config.gpuCount, config.gpuMemoryMb)
             .setEnvironment(config.runtime, config.network)
             .setSchedule(config.schedule);
 
@@ -28,6 +29,11 @@ export class CommandBuilder {
         // Add environment variables
         Object.entries(config.envVars).forEach(([key, value]) => {
             builder.addEnvVar(key, value);
+        });
+
+        // Add secret environment variables
+        Object.entries(config.secretEnvVars).forEach(([key, value]) => {
+            builder.addSecretEnvVar(key, value);
         });
 
         return builder.build();
@@ -86,6 +92,23 @@ export class CommandBuilder {
         return this;
     }
 
+    addSecretEnvVar(key: string, value: string): this {
+        const secretEnvVars = this.flags.get('secret-env') as string[] || [];
+        secretEnvVars.push(`${key}=${value}`);
+        this.flags.set('secret-env', secretEnvVars);
+        return this;
+    }
+
+    setGPU(gpuCount?: number, gpuMemoryMb?: number): this {
+        if (gpuCount && gpuCount > 0) {
+            this.flags.set('gpu', String(gpuCount));
+        }
+        if (gpuMemoryMb && gpuMemoryMb > 0) {
+            this.flags.set('gpu-memory', String(gpuMemoryMb));
+        }
+        return this;
+    }
+
     setSchedule(schedule: string): this {
         if (schedule) this.flags.set('schedule', schedule);
         return this;
@@ -99,7 +122,7 @@ export class CommandBuilder {
         // Build flag arguments with proper ordering
         const flagOrder = [
             'upload', 'upload-dir', 'max-cpu', 'max-memory', 'cpu-cores', 'max-iobps',
-            'runtime', 'network', 'volume', 'env', 'schedule'
+            'gpu', 'gpu-memory', 'runtime', 'network', 'volume', 'env', 'secret-env', 'schedule'
         ];
 
         flagOrder.forEach(flagName => {

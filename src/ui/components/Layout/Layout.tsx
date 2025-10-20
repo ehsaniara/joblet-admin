@@ -1,6 +1,6 @@
 // React import not needed with modern JSX transform
 import {Link, useLocation} from 'react-router-dom';
-import {Activity, HardDrive, HelpCircle, Home, List, Save, Settings, Workflow, X} from 'lucide-react';
+import {Activity, HardDrive, HelpCircle, Home, List, Save, Settings, X} from 'lucide-react';
 import clsx from 'clsx';
 import {useEffect, useState} from 'react';
 import {useTranslation} from 'react-i18next';
@@ -26,7 +26,6 @@ const Layout: React.FC<LayoutProps> = ({children}) => {
     const navigation = [
         {name: t('nav.dashboard'), href: '/', icon: Home},
         {name: t('nav.jobs'), href: '/jobs', icon: List},
-        {name: t('nav.workflows'), href: '/workflows', icon: Workflow},
         {name: t('nav.monitoring'), href: '/monitoring', icon: Activity},
         {name: t('nav.resources'), href: '/resources', icon: HardDrive},
     ];
@@ -208,7 +207,7 @@ const Layout: React.FC<LayoutProps> = ({children}) => {
                                     <h4 className="text-lg font-semibold text-gray-200 mb-3">Overview</h4>
                                     <p className="mb-2">
                                         Joblet provides an enterprise-grade job execution platform with a modern
-                                        React-based web interface for visual workflow management.
+                                        React-based web interface for job management and monitoring.
                                     </p>
                                 </div>
 
@@ -224,10 +223,6 @@ const Layout: React.FC<LayoutProps> = ({children}) => {
                                             <div className="flex items-center">
                                                 <List className="h-4 w-4 mr-2 text-green-400"/>
                                                 <strong>Jobs:</strong> Job list, details, and creation
-                                            </div>
-                                            <div className="flex items-center">
-                                                <Workflow className="h-4 w-4 mr-2 text-purple-400"/>
-                                                <strong>Workflows:</strong> YAML-based workflow management
                                             </div>
                                         </div>
                                         <div className="space-y-2">
@@ -248,9 +243,8 @@ const Layout: React.FC<LayoutProps> = ({children}) => {
                                     <h4 className="text-lg font-semibold text-gray-200 mb-3">Key Features</h4>
                                     <ul className="list-disc list-inside space-y-1">
                                         <li>Real-time metrics with comprehensive system observability</li>
-                                        <li>Workflow orchestration with job dependency validation</li>
+                                        <li>Job execution with resource management</li>
                                         <li>Live log streaming with advanced filtering</li>
-                                        <li>Visual dependency mapping and timeline views</li>
                                         <li>Role-based access control via mTLS authentication</li>
                                         <li>Auto-refresh functionality (configurable in Settings)</li>
                                     </ul>
@@ -261,7 +255,6 @@ const Layout: React.FC<LayoutProps> = ({children}) => {
                                     <h4 className="text-lg font-semibold text-gray-200 mb-3">Getting Started</h4>
                                     <ol className="list-decimal list-inside space-y-1">
                                         <li>Create jobs using the "New Job" button in the Jobs section</li>
-                                        <li>Configure workflows with YAML files</li>
                                         <li>Monitor job executions in real-time</li>
                                         <li>Use the Dashboard for system health overview</li>
                                         <li>Adjust settings using the Settings icon in the header</li>

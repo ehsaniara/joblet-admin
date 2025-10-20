@@ -13,7 +13,6 @@
   "nav": {
     "dashboard": "Tableau de bord",
     "jobs": "Tâches",
-    "workflows": "Flux de travail",
     "monitoring": "Surveillance système",
     "resources": "Ressources"
   },
@@ -104,18 +103,6 @@
     "liveUpdates": "Mises à jour en direct",
     "connecting": "Connexion en cours...",
     "loadingSystemInfo": "Chargement des informations système..."
-  },
-  "workflows": {
-    "title": "Flux de travail",
-    "subtitle": "Gérez et exécutez vos configurations de flux de travail",
-    "createWorkflow": "Créer un flux de travail",
-    "loadingWorkflows": "Chargement des flux de travail...",
-    "noWorkflows": "Aucun flux de travail trouvé",
-    "browse": "Parcourir",
-    "select": "Sélectionner",
-    "validate": "Valider",
-    "loadingDirectory": "Chargement du répertoire...",
-    "validationError": "Erreur de validation"
   },
   "resources": {
     "title": "Ressources",

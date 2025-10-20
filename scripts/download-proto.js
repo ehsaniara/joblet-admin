@@ -80,6 +80,11 @@ UPDATED_BY=auto-download
     console.log(`✅ Successfully downloaded joblet.proto ${PROTO_VERSION}`);
     console.log(`📄 Proto file: ${protoFile}`);
 
+    // Note: persist.proto is now internal as of v2.3.0
+    if (PROTO_VERSION >= 'v2.3.0') {
+      console.log(`ℹ️  Note: persist.proto is now internal and not included in public API`);
+    }
+
   } catch (error) {
     console.error('❌ Failed to download proto file:', error.message);
 

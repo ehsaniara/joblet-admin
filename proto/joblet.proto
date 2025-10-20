@@ -1,10 +1,10 @@
 syntax = "proto3";
 
-option go_package = "github.com/ehsaniara/joblet/api/gen";
+option go_package = "github.com/ehsaniara/joblet-proto/v2/gen";
 
 package joblet;
 
-// Main service for running jobs and workflows
+// Main service for running jobs
 service JobService {
   // Job operations
   rpc RunJob(RunJobRequest) returns (RunJobResponse){}
@@ -16,15 +16,8 @@ service JobService {
   rpc GetJobLogs(GetJobLogsReq) returns (stream DataChunk);
   rpc ListJobs(EmptyRequest) returns (Jobs){}
 
-  // Job metrics operations (live streaming only - historical metrics via persist.QueryMetrics)
+  // Job metrics operations
   rpc GetJobMetrics(JobMetricsRequest) returns (stream JobMetricsSample){}
-  rpc GetJobMetricsSummary(JobMetricsSummaryRequest) returns (JobMetricsSummaryResponse){}
-
-  // Workflow operations
-  rpc RunWorkflow(RunWorkflowRequest) returns (RunWorkflowResponse){}
-  rpc GetWorkflowStatus(GetWorkflowStatusRequest) returns (GetWorkflowStatusResponse){}
-  rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse){}
-  rpc GetWorkflowJobs(GetWorkflowJobsRequest) returns (GetWorkflowJobsResponse){}
 }
 
 // Network service
@@ -106,7 +99,7 @@ message GetJobStatusReq{
 
 message GetJobStatusRes{
   string uuid = 1;                         // Job UUID identifier
-  string name = 2;                         // Human-readable job name (for workflows, empty for individual jobs)
+  string name = 2;                         // Human-readable job name (optional)
   string command = 3;
   repeated string args = 4;
   int32 maxCPU = 5;
@@ -125,8 +118,6 @@ message GetJobStatusRes{
   string runtime = 18;                     // Runtime environment
   string workDir = 19;                     // Working directory
   repeated string uploads = 20;            // Uploaded files/directories
-  repeated string dependencies = 21;       // Job dependencies (for workflow jobs)
-  string workflowUuid = 22;               // Workflow UUID (if part of workflow)
 
   // GPU allocation info
   repeated int32 gpu_indices = 23;         // Which GPUs allocated to this job
@@ -499,7 +490,7 @@ message RuntimeTestRes {
   int32 exitCode = 5;
 }
 
-// Job and workflow messages
+// Job messages
 
 message RunJobRequest {
   string name = 1;                         // Job name
@@ -518,12 +509,7 @@ message RunJobRequest {
   map<string, string> environment = 14;
   map<string, string> secret_environment = 18; // Secret env vars
 
-  // Workflow fields (when job is part of workflow)
-  string workflowUuid = 15;         // Workflow UUID
-  string jobUuid = 16;              // Job UUID
-  repeated JobRequirement requirements = 17;
-
-  // GPU fields (new GPU support)
+  // GPU fields
   int32 gpu_count = 19;             // How many GPUs requested
   int32 gpu_memory_mb = 20;         // Minimum GPU memory needed (MB)
 }
@@ -543,72 +529,6 @@ message RunJobResponse {
   string scheduledTime = 12;    // Schedule time
 }
 
-message JobRequirement {
-  string jobUuid = 1;               // Job UUID identifier  
-  string status = 2;
-  string expression = 3;
-}
-
-message RunWorkflowRequest {
-  string workflow = 1;                    // Workflow filename
-  int32 totalJobs = 2;
-  repeated string jobOrder = 3;
-  string yamlContent = 4;                 // YAML content
-  repeated FileUpload workflowFiles = 5;  // Workflow files
-}
-
-message RunWorkflowResponse {
-  string workflowUuid = 1;                 // Workflow UUID identifier
-  string status = 2;
-}
-
-message GetWorkflowStatusRequest {
-  string workflowUuid = 1;                 // Workflow UUID identifier
-}
-
-message GetWorkflowStatusResponse {
-  WorkflowInfo workflow = 1;
-  repeated WorkflowJob jobs = 2;
-}
-
-message ListWorkflowsRequest {
-  bool includeCompleted = 1;
-}
-
-message ListWorkflowsResponse {
-  repeated WorkflowInfo workflows = 1;
-}
-
-message GetWorkflowJobsRequest {
-  string workflowUuid = 1;                 // Workflow UUID identifier
-}
-
-message GetWorkflowJobsResponse {
-  repeated WorkflowJob jobs = 1;
-}
-message WorkflowInfo {
-  string uuid = 1;                         // Workflow UUID identifier
-  string status = 2;
-  int32 totalJobs = 3;
-  int32 completedJobs = 4;
-  int32 failedJobs = 5;
-  int32 canceledJobs = 6;
-  Timestamp createdAt = 7;
-  Timestamp startedAt = 8;
-  Timestamp completedAt = 9;
-  string yamlContent = 10;                 // Original YAML
-}
-
-message WorkflowJob {
-  string jobUuid = 1;                      // Job UUID identifier
-  string jobName = 2;                      // Job name from workflow
-  string status = 3;
-  repeated string dependencies = 4;
-  Timestamp startTime = 5;
-  Timestamp endTime = 6;
-  int32 exitCode = 7;
-}
-
 message Timestamp {
   int64 seconds = 1;
   int32 nanos = 2;
@@ -620,6 +540,7 @@ message InstallRuntimeRequest {
   string branch = 3;               // Branch
   string path = 4;                 // Path in repo
   bool forceReinstall = 5;         // Force reinstall
+  string registry_url = 6;         // Registry URL (for installing from external registry)
 }
 
 message InstallRuntimeResponse {
@@ -676,8 +597,6 @@ message RuntimeSpecInfo {
 message JobMetricsRequest {
   string uuid = 1;                 // Job UUID identifier
 }
-
-// Use persist.QueryMetrics for historical metrics instead of GetJobMetricsHistory
 
 message JobMetricsSummaryRequest {
   string uuid = 1;                 // Job UUID identifier

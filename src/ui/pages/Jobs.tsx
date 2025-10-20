@@ -384,6 +384,12 @@ const Jobs: React.FC = () => {
                                                     <div className="text-sm text-white font-mono" title={job.id}>
                                                         {shortenUuid(job.id)}
                                                     </div>
+                                                    {job.nodeId && (
+                                                        <div className="text-xs text-gray-400 font-mono"
+                                                             title={`Node: ${job.nodeId}`}>
+                                                            @{shortenUuid(job.nodeId)}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
@@ -598,8 +604,6 @@ rnx job delete-all
                 <JobDetail
                     jobId={selectedJobId}
                     onClose={handleCloseModal}
-                    isWorkflowJob={false}
-                    workflowJobs={[]}
                 />
             )}
 

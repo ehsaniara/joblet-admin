@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState} from 'react';
 import {useTranslation} from 'react-i18next';
-import {Cpu, Download, ExternalLink, HardDrive, Info, Network, Plus, RefreshCw, Trash2, X} from 'lucide-react';
+import {Cpu, Download, ExternalLink, HardDrive, Network, Plus, RefreshCw, Trash2, X} from 'lucide-react';
 import {apiService} from '../services/apiService';
 
 interface Volume {
@@ -31,8 +31,9 @@ interface Runtime {
 
 interface GitHubRuntime {
     name: string;
-    type: string;
+    type?: string;
     download_url?: string;
+    downloadUrl?: string;
     html_url?: string;
     platforms?: string[];
     isInstalled?: boolean;
@@ -40,7 +41,12 @@ interface GitHubRuntime {
     description?: string;
     category?: string;
     language?: string;
-    version?: string;
+    version: string;  // Required for registry runtimes
+    versionTag?: string;  // 'latest' or specific version
+    fullSpec?: string;  // e.g., "python-3.11-ml@1.0.2"
+    isLatest?: boolean;
+    checksum?: string;
+    size?: string;
     requirements?: {
         min_ram_mb: number;
         min_disk_mb: number;
@@ -109,7 +115,8 @@ const Resources: React.FC = () => {
         runtimes: [] as GitHubRuntime[],
         repository: 'ehsaniara/joblet/tree/main/runtimes',
         validatingRepo: false,
-        searchQuery: ''
+        searchQuery: '',
+        showOnlyLatest: true  // Default to showing only latest versions
     });
 
     const [installProgress, setInstallProgress] = useState({
@@ -188,19 +195,26 @@ const Resources: React.FC = () => {
         try {
             setLoading(prev => ({...prev, githubRuntimes: true}));
             setError(prev => ({...prev, githubRuntimes: ''}));
-            const response = await fetch(`/api/github/runtimes?repo=ehsaniara/joblet/tree/main/runtimes`);
+            // Use registry endpoint for versioned runtimes
+            const response = await fetch(`/api/registry/runtimes`);
             if (!response.ok) {
-                throw new Error('Failed to fetch GitHub runtimes');
+                throw new Error('Failed to fetch registry runtimes');
             }
             const data = await response.json();
-            const localRuntimeNames = runtimes.map(r => r.name.toLowerCase());
+            // Create a Set of "name@version" for installed runtimes
+            const installedRuntimeSpecs = new Set(
+                runtimes.map(r => `${r.name.toLowerCase()}@${r.version}`)
+            );
             const runtimesWithInstallStatus = data.map((runtime: GitHubRuntime) => ({
                 ...runtime,
-                isInstalled: localRuntimeNames.includes(runtime.name.toLowerCase())
+                isInstalled: installedRuntimeSpecs.has(`${runtime.name.toLowerCase()}@${runtime.version}`)
             }));
             setGithubRuntimes(runtimesWithInstallStatus);
         } catch (err) {
-            setError(prev => ({...prev, githubRuntimes: err instanceof Error ? err.message : 'Failed to fetch GitHub runtimes'}));
+            setError(prev => ({
+                ...prev,
+                githubRuntimes: err instanceof Error ? err.message : 'Failed to fetch registry runtimes'
+            }));
         } finally {
             setLoading(prev => ({...prev, githubRuntimes: false}));
         }
@@ -229,43 +243,29 @@ const Resources: React.FC = () => {
     };
 
     const fetchGitHubRuntimes = async (customRepo?: string) => {
-        const repoPath = customRepo || runtimesDialog.repository;
         setRuntimesDialog(prev => ({...prev, loading: true, error: ''}));
 
         try {
-            // First validate that the repository has runtime-manifest.json
-            const isValid = await validateRuntimeRepository(repoPath);
-            if (!isValid) {
-                throw new Error(t('resources.repositoryNoManifest'));
-            }
-
-            // Always use server-side proxy to fetch from GitHub (avoids CORS and rate limits)
-            const response = await fetch(`/api/github/runtimes?repo=${encodeURIComponent(repoPath)}`);
+            // Use registry endpoint for versioned runtimes
+            const response = await fetch(`/api/registry/runtimes`);
 
             if (!response.ok) {
-                if (response.status === 403) {
-                    throw new Error('GitHub API rate limit exceeded. Please try again later or use a personal access token.');
-                }
-                throw new Error(`GitHub API error: ${response.status} - ${response.statusText}`);
+                throw new Error(`Failed to fetch registry runtimes: ${response.status}`);
             }
 
             const data = await response.json();
 
-            // Server proxy response - already processed
-            let runtimesWithPlatforms;
-            if (Array.isArray(data)) {
-                runtimesWithPlatforms = data;
-            } else if (data.error) {
-                throw new Error(data.message || 'Failed to fetch runtimes');
-            } else {
-                throw new Error('Invalid response format');
+            if (!Array.isArray(data)) {
+                throw new Error('Invalid response format from registry');
             }
 
-            // Compare with local runtimes to mark installed status
-            const localRuntimeNames = runtimes.map(r => r.name.toLowerCase());
-            const runtimesWithInstallStatus = runtimesWithPlatforms.map(runtime => ({
+            // Compare with local runtimes to mark installed status (by name@version)
+            const installedRuntimeSpecs = new Set(
+                runtimes.map(r => `${r.name.toLowerCase()}@${r.version}`)
+            );
+            const runtimesWithInstallStatus = data.map((runtime: GitHubRuntime) => ({
                 ...runtime,
-                isInstalled: localRuntimeNames.includes(runtime.name.toLowerCase())
+                isInstalled: installedRuntimeSpecs.has(`${runtime.name.toLowerCase()}@${runtime.version}`)
             }));
 
             setRuntimesDialog(prev => ({
@@ -277,7 +277,7 @@ const Resources: React.FC = () => {
             setRuntimesDialog(prev => ({
                 ...prev,
                 runtimes: [],
-                error: err instanceof Error ? err.message : 'Failed to fetch runtimes from repository',
+                error: err instanceof Error ? err.message : 'Failed to fetch runtimes from registry',
                 loading: false
             }));
         }
@@ -301,7 +301,8 @@ const Resources: React.FC = () => {
             runtimes: [],
             repository: 'ehsaniara/joblet/tree/main/runtimes',
             validatingRepo: false,
-            searchQuery: ''
+            searchQuery: '',
+            showOnlyLatest: true
         });
     };
 
@@ -666,8 +667,14 @@ const Resources: React.FC = () => {
         return parseFloat((numericSize / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     };
 
-    // Filter runtimes based on search query
+    // Filter runtimes based on search query and version filter
     const filteredRuntimes = runtimesDialog.runtimes.filter(runtime => {
+        // Filter by latest version if enabled
+        if (runtimesDialog.showOnlyLatest && !runtime.isLatest) {
+            return false;
+        }
+
+        // Filter by search query
         const searchLower = runtimesDialog.searchQuery.toLowerCase();
         return (
             runtime.name.toLowerCase().includes(searchLower) ||
@@ -1280,8 +1287,9 @@ const Resources: React.FC = () => {
                 <div
                     className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
                     <div
-                        className="relative bg-gray-800 rounded-lg shadow-xl max-w-5xl w-full mx-4 max-h-[95vh] overflow-hidden">
-                        <div className="p-6">
+                        className="relative bg-gray-800 rounded-lg shadow-xl max-w-5xl w-full mx-4 max-h-[95vh] flex flex-col">
+                        {/* Header - Fixed */}
+                        <div className="p-6 pb-4 flex-shrink-0 border-b border-gray-700">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-lg font-medium text-gray-200">
                                     {t('resources.runtimes')} from GitHub
@@ -1336,9 +1344,9 @@ const Resources: React.FC = () => {
                                 </p>
                             </div>
 
-                            {/* Search Box */}
+                            {/* Search Box and Filters */}
                             {runtimesDialog.runtimes.length > 0 && (
-                                <div className="mb-4">
+                                <div className="space-y-3">
                                     <input
                                         type="text"
                                         value={runtimesDialog.searchQuery}
@@ -1349,226 +1357,246 @@ const Resources: React.FC = () => {
                                         placeholder={t('resources.searchRuntimes')}
                                         className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
-                                    {runtimesDialog.searchQuery && (
-                                        <p className="text-xs text-gray-400 mt-1">
-                                            Showing {filteredRuntimes.length} of {runtimesDialog.runtimes.length} runtimes
-                                        </p>
-                                    )}
+
+                                    <div className="flex items-center justify-between">
+                                        <label className="flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={runtimesDialog.showOnlyLatest}
+                                                onChange={(e) => setRuntimesDialog(prev => ({
+                                                    ...prev,
+                                                    showOnlyLatest: e.target.checked
+                                                }))}
+                                                className="mr-2 h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                                            />
+                                            <span className="text-sm text-gray-300">Show only latest versions</span>
+                                        </label>
+
+                                        {(runtimesDialog.searchQuery || !runtimesDialog.showOnlyLatest) && (
+                                            <p className="text-xs text-gray-400">
+                                                Showing {filteredRuntimes.length} of {runtimesDialog.runtimes.length} runtimes
+                                            </p>
+                                        )}
+                                    </div>
                                 </div>
                             )}
+                        </div>
 
-                            <div className="overflow-y-auto max-h-[70vh]">
-                                {runtimesDialog.loading ? (
-                                    <div className="text-center py-8">
-                                        <div
-                                            className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500 mx-auto mb-4"></div>
-                                        <p className="text-gray-500">{t('resources.fetchingRuntimes')}</p>
-                                    </div>
-                                ) : runtimesDialog.error ? (
-                                    <div className="text-center py-8">
-                                        <p className="text-red-500 text-sm mb-4">{runtimesDialog.error}</p>
-                                        <button
-                                            onClick={() => fetchGitHubRuntimes()}
-                                            className="inline-flex items-center px-4 py-2 border border-gray-600 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700">
-                                            <RefreshCw className="h-4 w-4 mr-2"/>
-                                            Retry
-                                        </button>
-                                    </div>
-                                ) : filteredRuntimes.length === 0 && runtimesDialog.runtimes.length > 0 ? (
-                                    <div className="text-center py-8">
-                                        <p className="text-gray-500">No runtimes match your search</p>
-                                    </div>
-                                ) : runtimesDialog.runtimes.length === 0 ? (
-                                    <div className="text-center py-8">
-                                        <p className="text-gray-500">No runtimes found in repository</p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-3">
-                                        {filteredRuntimes.map((runtime, index) => (
-                                            <div key={runtime.name || index}
-                                                 className="border border-gray-600 rounded-lg p-6 hover:bg-gray-700 transition-colors">
-                                                <div className="flex items-start justify-between">
-                                                    <div className="flex-1 pr-6">
-                                                        {/* Header */}
-                                                        <div className="flex items-start mb-3">
-                                                            <Cpu className="h-6 w-6 text-purple-500 mr-3 mt-1"/>
-                                                            <div className="flex-1">
-                                                                <div className="flex items-center gap-3 mb-1">
-                                                                    <h4 className="font-semibold text-lg text-gray-200">
-                                                                        {runtime.displayName || runtime.name}
-                                                                    </h4>
-                                                                    {runtime.version && (
-                                                                        <span
-                                                                            className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200">
+                        {/* Scrollable Content Area */}
+                        <div className="flex-1 overflow-y-auto p-6">
+                            {runtimesDialog.loading ? (
+                                <div className="text-center py-8">
+                                    <div
+                                        className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500 mx-auto mb-4"></div>
+                                    <p className="text-gray-500">{t('resources.fetchingRuntimes')}</p>
+                                </div>
+                            ) : runtimesDialog.error ? (
+                                <div className="text-center py-8">
+                                    <p className="text-red-500 text-sm mb-4">{runtimesDialog.error}</p>
+                                    <button
+                                        onClick={() => fetchGitHubRuntimes()}
+                                        className="inline-flex items-center px-4 py-2 border border-gray-600 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700">
+                                        <RefreshCw className="h-4 w-4 mr-2"/>
+                                        Retry
+                                    </button>
+                                </div>
+                            ) : filteredRuntimes.length === 0 && runtimesDialog.runtimes.length > 0 ? (
+                                <div className="text-center py-8">
+                                    <p className="text-gray-500">No runtimes match your search</p>
+                                </div>
+                            ) : runtimesDialog.runtimes.length === 0 ? (
+                                <div className="text-center py-8">
+                                    <p className="text-gray-500">No runtimes found in repository</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {filteredRuntimes.map((runtime, index) => (
+                                        <div key={runtime.fullSpec || `${runtime.name}-${runtime.version}` || index}
+                                             className="border border-gray-600 rounded-lg p-6 hover:bg-gray-700 transition-colors">
+                                            <div className="flex items-start justify-between">
+                                                <div className="flex-1 pr-6">
+                                                    {/* Header */}
+                                                    <div className="flex items-start mb-3">
+                                                        <Cpu className="h-6 w-6 text-purple-500 mr-3 mt-1"/>
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center gap-3 mb-1">
+                                                                <h4 className="font-semibold text-lg text-gray-200">
+                                                                    {runtime.displayName || runtime.name}
+                                                                </h4>
+                                                                {runtime.version && (
+                                                                    <span
+                                                                        className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200">
                                                                             v{runtime.version}
                                                                         </span>
-                                                                    )}
-                                                                    {runtime.language && (
-                                                                        <span
-                                                                            className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                                                )}
+                                                                {runtime.language && (
+                                                                    <span
+                                                                        className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
                                                                             {runtime.language}
                                                                         </span>
-                                                                    )}
-                                                                </div>
-                                                                <p className="text-sm text-gray-400 font-mono">{runtime.name}</p>
-                                                                {runtime.description && (
-                                                                    <p className="text-sm text-gray-300 mt-2">{runtime.description}</p>
                                                                 )}
                                                             </div>
-                                                        </div>
-
-                                                        {/* Details Grid */}
-                                                        <div className="ml-9 space-y-3">
-                                                            {/* Platforms */}
-                                                            {runtime.platforms && runtime.platforms.length > 0 && (
-                                                                <div>
-                                                                    <p className="text-xs font-medium text-gray-400 mb-2">Supported
-                                                                        Platforms:</p>
-                                                                    <div className="flex flex-wrap gap-1">
-                                                                        {runtime.platforms.map((platform) => (
-                                                                            <span
-                                                                                key={platform}
-                                                                                className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
-                                                                            >
-                                                                                {platform}
-                                                                            </span>
-                                                                        ))}
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            {/* Requirements */}
-                                                            {runtime.requirements && (
-                                                                <div>
-                                                                    <p className="text-xs font-medium text-gray-400 mb-2">System
-                                                                        Requirements:</p>
-                                                                    <div
-                                                                        className="flex flex-wrap gap-2 text-xs text-gray-300">
-                                                                        <span>RAM: {runtime.requirements.min_ram_mb}MB</span>
-                                                                        <span>•</span>
-                                                                        <span>Disk: {runtime.requirements.min_disk_mb}MB</span>
-                                                                        {runtime.requirements.gpu_required && (
-                                                                            <>
-                                                                                <span>•</span>
-                                                                                <span className="text-yellow-400">GPU Required</span>
-                                                                            </>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            {/* Executables */}
-                                                            {runtime.provides?.executables && runtime.provides.executables.length > 0 && (
-                                                                <div>
-                                                                    <p className="text-xs font-medium text-gray-400 mb-2">Provides:</p>
-                                                                    <div className="flex flex-wrap gap-1">
-                                                                        {runtime.provides.executables.slice(0, 6).map((executable) => (
-                                                                            <span
-                                                                                key={executable}
-                                                                                className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                                                                            >
-                                                                                {executable}
-                                                                            </span>
-                                                                        ))}
-                                                                        {runtime.provides.executables.length > 6 && (
-                                                                            <span className="text-xs text-gray-400">
-                                                                                +{runtime.provides.executables.length - 6} more
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            {/* Tags */}
-                                                            {runtime.tags && runtime.tags.length > 0 && (
-                                                                <div>
-                                                                    <p className="text-xs font-medium text-gray-400 mb-2">Tags:</p>
-                                                                    <div className="flex flex-wrap gap-1">
-                                                                        {runtime.tags.slice(0, 8).map((tag) => (
-                                                                            <span
-                                                                                key={tag}
-                                                                                className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
-                                                                            >
-                                                                                #{tag}
-                                                                            </span>
-                                                                        ))}
-                                                                        {runtime.tags.length > 8 && (
-                                                                            <span className="text-xs text-gray-400">
-                                                                                +{runtime.tags.length - 8} more
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
+                                                            <p className="text-sm text-gray-400 font-mono">{runtime.name}</p>
+                                                            {runtime.description && (
+                                                                <p className="text-sm text-gray-300 mt-2">{runtime.description}</p>
                                                             )}
                                                         </div>
                                                     </div>
 
-                                                    {/* Action Buttons Column */}
-                                                    <div className="flex flex-col items-end space-y-2 min-w-0">
-                                                        {/* Install Status Indicator */}
-                                                        {runtime.isInstalled ? (
-                                                            <span
-                                                                className="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 w-full justify-center">
-                                                                ✓ Installed
-                                                            </span>
-                                                        ) : (
-                                                            <span
-                                                                className="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 w-full justify-center">
-                                                                Not Installed
-                                                            </span>
+                                                    {/* Details Grid */}
+                                                    <div className="ml-9 space-y-3">
+                                                        {/* Platforms */}
+                                                        {runtime.platforms && runtime.platforms.length > 0 && (
+                                                            <div>
+                                                                <p className="text-xs font-medium text-gray-400 mb-2">Supported
+                                                                    Platforms:</p>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {runtime.platforms.map((platform) => (
+                                                                        <span
+                                                                            key={platform}
+                                                                            className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+                                                                        >
+                                                                                {platform}
+                                                                            </span>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
                                                         )}
 
-                                                        {/* Action Buttons */}
-                                                        {runtime.html_url && (
-                                                            <a
-                                                                href={runtime.html_url}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="inline-flex items-center px-4 py-2 border border-gray-600 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-600 transition-colors w-full justify-center"
-                                                            >
-                                                                <ExternalLink className="h-4 w-4 mr-2"/>
-                                                                View
-                                                            </a>
+                                                        {/* Requirements */}
+                                                        {runtime.requirements && (
+                                                            <div>
+                                                                <p className="text-xs font-medium text-gray-400 mb-2">System
+                                                                    Requirements:</p>
+                                                                <div
+                                                                    className="flex flex-wrap gap-2 text-xs text-gray-300">
+                                                                    <span>RAM: {runtime.requirements.min_ram_mb}MB</span>
+                                                                    <span>•</span>
+                                                                    <span>Disk: {runtime.requirements.min_disk_mb}MB</span>
+                                                                    {runtime.requirements.gpu_required && (
+                                                                        <>
+                                                                            <span>•</span>
+                                                                            <span className="text-yellow-400">GPU Required</span>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </div>
                                                         )}
 
-                                                        {!runtime.isInstalled ? (
-                                                            <button
-                                                                onClick={() => showRuntimeConfirmation('install', runtime.name)}
-                                                                className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors w-full justify-center"
-                                                                title={t('resources.installRuntime')}
-                                                            >
-                                                                <Download className="h-4 w-4 mr-2"/>
-                                                                Install
-                                                            </button>
-                                                        ) : (
-                                                            <>
-                                                                <button
-                                                                    onClick={() => showRuntimeConfirmation('reinstall', runtime.name)}
-                                                                    className="inline-flex items-center px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-md text-sm font-medium transition-colors w-full justify-center"
-                                                                    title={t('resources.reinstallRuntime')}
-                                                                >
-                                                                    <RefreshCw className="h-4 w-4 mr-2"/>
-                                                                    Reinstall
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => showRuntimeConfirmation('remove', runtime.name)}
-                                                                    className="inline-flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium transition-colors w-full justify-center"
-                                                                    title={t('resources.removeRuntime')}
-                                                                >
-                                                                    <Trash2 className="h-4 w-4 mr-2"/>
-                                                                    Remove
-                                                                </button>
-                                                            </>
+                                                        {/* Executables */}
+                                                        {runtime.provides?.executables && runtime.provides.executables.length > 0 && (
+                                                            <div>
+                                                                <p className="text-xs font-medium text-gray-400 mb-2">Provides:</p>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {runtime.provides.executables.slice(0, 6).map((executable) => (
+                                                                        <span
+                                                                            key={executable}
+                                                                            className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                                                                        >
+                                                                                {executable}
+                                                                            </span>
+                                                                    ))}
+                                                                    {runtime.provides.executables.length > 6 && (
+                                                                        <span className="text-xs text-gray-400">
+                                                                                +{runtime.provides.executables.length - 6} more
+                                                                            </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Tags */}
+                                                        {runtime.tags && runtime.tags.length > 0 && (
+                                                            <div>
+                                                                <p className="text-xs font-medium text-gray-400 mb-2">Tags:</p>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {runtime.tags.slice(0, 8).map((tag) => (
+                                                                        <span
+                                                                            key={tag}
+                                                                            className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+                                                                        >
+                                                                                #{tag}
+                                                                            </span>
+                                                                    ))}
+                                                                    {runtime.tags.length > 8 && (
+                                                                        <span className="text-xs text-gray-400">
+                                                                                +{runtime.tags.length - 8} more
+                                                                            </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
                                                         )}
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
 
-                            <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-600">
+                                                {/* Action Buttons Column */}
+                                                <div className="flex flex-col items-end space-y-2 min-w-0">
+                                                    {/* Install Status Indicator */}
+                                                    {runtime.isInstalled ? (
+                                                        <span
+                                                            className="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 w-full justify-center">
+                                                                ✓ Installed
+                                                            </span>
+                                                    ) : (
+                                                        <span
+                                                            className="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 w-full justify-center">
+                                                                Not Installed
+                                                            </span>
+                                                    )}
+
+                                                    {/* Action Buttons */}
+                                                    {runtime.html_url && (
+                                                        <a
+                                                            href={runtime.html_url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex items-center px-4 py-2 border border-gray-600 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-600 transition-colors w-full justify-center"
+                                                        >
+                                                            <ExternalLink className="h-4 w-4 mr-2"/>
+                                                            View
+                                                        </a>
+                                                    )}
+
+                                                    {!runtime.isInstalled ? (
+                                                        <button
+                                                            onClick={() => showRuntimeConfirmation('install', runtime.fullSpec || `${runtime.name}@${runtime.version}`)}
+                                                            className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors w-full justify-center"
+                                                            title={t('resources.installRuntime')}
+                                                        >
+                                                            <Download className="h-4 w-4 mr-2"/>
+                                                            Install
+                                                        </button>
+                                                    ) : (
+                                                        <>
+                                                            <button
+                                                                onClick={() => showRuntimeConfirmation('reinstall', runtime.fullSpec || `${runtime.name}@${runtime.version}`)}
+                                                                className="inline-flex items-center px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-md text-sm font-medium transition-colors w-full justify-center"
+                                                                title={t('resources.reinstallRuntime')}
+                                                            >
+                                                                <RefreshCw className="h-4 w-4 mr-2"/>
+                                                                Reinstall
+                                                            </button>
+                                                            <button
+                                                                onClick={() => showRuntimeConfirmation('remove', runtime.name)}
+                                                                className="inline-flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium transition-colors w-full justify-center"
+                                                                title={t('resources.removeRuntime')}
+                                                            >
+                                                                <Trash2 className="h-4 w-4 mr-2"/>
+                                                                Remove
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer - Fixed */}
+                        <div className="flex-shrink-0 p-6 pt-4 border-t border-gray-700">
+                            <div className="flex justify-between items-center">
                                 <p className="text-xs text-gray-400">
                                     Fetched from GitHub repository
                                 </p>
@@ -1720,9 +1748,9 @@ const Resources: React.FC = () => {
                                                 'text-red-400'
                                     }`}>
 {runtimeConfirm.action === 'install'
-    ? `rnx runtime install ${runtimeConfirm.runtimeName} --github-repo=ehsaniara/joblet/tree/main/runtimes`
+    ? `rnx runtime install ${runtimeConfirm.runtimeName}`
     : runtimeConfirm.action === 'reinstall'
-        ? `rnx runtime install ${runtimeConfirm.runtimeName} --force --github-repo=ehsaniara/joblet/tree/main/runtimes`
+        ? `rnx runtime install ${runtimeConfirm.runtimeName} --force`
         : `rnx runtime remove ${runtimeConfirm.runtimeName}`}
                                     </pre>
                                 </div>

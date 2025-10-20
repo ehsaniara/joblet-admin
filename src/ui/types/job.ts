@@ -36,7 +36,6 @@ export interface Job {
     // Additional fields from rnx job status
     createdTime?: string;
     workingDir?: string;
-    workflowUUID?: string;
     name?: string;
     // GPU fields
     gpuIndices?: number[];
@@ -44,15 +43,6 @@ export interface Job {
     gpuMemoryMb?: number;
     // Node identification
     nodeId?: string;
-}
-
-// Extended interface for workflow jobs with additional fields
-export interface WorkflowJob extends Job {
-    name: string;
-    rnxJobId: number | null;
-    hasStarted: boolean;
-    isWorkflowJob: boolean;
-    workflowId: string;
 }
 
 export interface ResourceUsage {

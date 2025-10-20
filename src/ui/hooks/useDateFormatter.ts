@@ -1,11 +1,11 @@
-import { useCallback } from 'react';
-import { useSettings } from '../contexts/SettingsContext';
+import {useCallback} from 'react';
+import {useSettings} from '../contexts/SettingsContext';
 
 /**
  * Hook to format dates using the user's timezone setting
  */
 export const useDateFormatter = () => {
-    const { settings } = useSettings();
+    const {settings} = useSettings();
 
     const formatTime = useCallback((date: Date | string | number | null | undefined): string => {
         if (!date) return 'N/A';

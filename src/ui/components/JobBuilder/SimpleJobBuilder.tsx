@@ -381,7 +381,7 @@ export const SimpleJobBuilder: React.FC<SimpleJobBuilderProps> = ({
                 };
             };
 
-            const { command, args } = parseCommand(config.command);
+            const {command, args} = parseCommand(config.command);
 
             const request: JobExecuteRequest = {
                 command: command,
@@ -722,7 +722,7 @@ export const SimpleJobBuilder: React.FC<SimpleJobBuilderProps> = ({
                                     >
                                         <option key="default" value="">Default</option>
                                         {runtimes.map((runtime) => (
-                                            <option key={runtime.id} value={runtime.name}>
+                                            <option key={`${runtime.name}-${runtime.version}`} value={runtime.name}>
                                                 {runtime.name} {runtime.version && `(${runtime.version})`}
                                             </option>
                                         ))}

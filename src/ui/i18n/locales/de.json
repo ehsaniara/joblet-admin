@@ -13,7 +13,6 @@
   "nav": {
     "dashboard": "Dashboard",
     "jobs": "Jobs",
-    "workflows": "Workflows",
     "monitoring": "Systemüberwachung",
     "resources": "Ressourcen"
   },
@@ -88,7 +87,7 @@
   "help": {
     "title": "Joblet Admin Hilfe",
     "overview": "Überblick",
-    "overviewText": "Joblet bietet eine unternehmenstaugliche Job-Ausführungsplattform mit einer modernen React-basierten Weboberfläche für die visuelle Workflow-Verwaltung.",
+    "overviewText": "Joblet bietet eine unternehmenstaugliche Job-Ausführungsplattform mit einer modernen React-basierten Weboberfläche für Job-Verwaltung und Überwachung.",
     "mainSections": "Hauptbereiche",
     "keyFeatures": "Hauptfunktionen",
     "gettingStarted": "Erste Schritte",
@@ -104,18 +103,6 @@
     "liveUpdates": "Live-Updates",
     "connecting": "Verbindung wird hergestellt...",
     "loadingSystemInfo": "Systeminformationen werden geladen..."
-  },
-  "workflows": {
-    "title": "Workflows",
-    "subtitle": "Verwalten und führen Sie Ihre Workflow-Konfigurationen aus",
-    "createWorkflow": "Workflow erstellen",
-    "loadingWorkflows": "Workflows werden geladen...",
-    "noWorkflows": "Keine Workflows gefunden",
-    "browse": "Durchsuchen",
-    "select": "Auswählen",
-    "validate": "Validieren",
-    "loadingDirectory": "Verzeichnis wird geladen...",
-    "validationError": "Validierungsfehler"
   },
   "resources": {
     "title": "Ressourcen",

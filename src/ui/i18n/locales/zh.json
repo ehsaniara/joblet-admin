@@ -13,7 +13,6 @@
   "nav": {
     "dashboard": "仪表板",
     "jobs": "作业",
-    "workflows": "工作流",
     "monitoring": "系统监控",
     "resources": "资源"
   },
@@ -104,18 +103,6 @@
     "liveUpdates": "实时更新",
     "connecting": "连接中...",
     "loadingSystemInfo": "正在加载系统信息..."
-  },
-  "workflows": {
-    "title": "工作流",
-    "subtitle": "管理和执行您的工作流配置",
-    "createWorkflow": "创建工作流",
-    "loadingWorkflows": "正在加载工作流...",
-    "noWorkflows": "未找到工作流",
-    "browse": "浏览",
-    "select": "选择",
-    "validate": "验证",
-    "loadingDirectory": "正在加载目录...",
-    "validationError": "验证错误"
   },
   "resources": {
     "title": "资源",

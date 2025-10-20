@@ -13,7 +13,6 @@
   "nav": {
     "dashboard": "ダッシュボード",
     "jobs": "ジョブ",
-    "workflows": "ワークフロー",
     "monitoring": "システム監視",
     "resources": "リソース"
   },
@@ -104,18 +103,6 @@
     "liveUpdates": "ライブ更新",
     "connecting": "接続中...",
     "loadingSystemInfo": "システム情報を読み込み中..."
-  },
-  "workflows": {
-    "title": "ワークフロー",
-    "subtitle": "ワークフロー設定の管理と実行",
-    "createWorkflow": "ワークフローを作成",
-    "loadingWorkflows": "ワークフローを読み込み中...",
-    "noWorkflows": "ワークフローが見つかりません",
-    "browse": "参照",
-    "select": "選択",
-    "validate": "検証",
-    "loadingDirectory": "ディレクトリを読み込み中...",
-    "validationError": "検証エラー"
   },
   "resources": {
     "title": "リソース",

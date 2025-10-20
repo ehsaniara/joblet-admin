@@ -98,7 +98,8 @@ const NetworkCard: React.FC<NetworkCardProps> = ({networkInfo}) => {
                                         {iface.ipAddresses && iface.ipAddresses.length > 0 ? (
                                             <div className="space-y-1">
                                                 {iface.ipAddresses.map((ip, idx) => (
-                                                    <div key={idx} className="font-mono text-sm bg-gray-700 px-2 py-0.5 rounded inline-block mr-1">
+                                                    <div key={idx}
+                                                         className="font-mono text-sm bg-gray-700 px-2 py-0.5 rounded inline-block mr-1">
                                                         {ip}
                                                     </div>
                                                 ))}
@@ -112,7 +113,8 @@ const NetworkCard: React.FC<NetworkCardProps> = ({networkInfo}) => {
                                     <span className="text-gray-400">MAC Address</span>
                                     <div className="font-medium text-white">
                                         {iface.macAddress ? (
-                                            <div className="font-mono text-sm bg-gray-700 px-2 py-0.5 rounded inline-block">
+                                            <div
+                                                className="font-mono text-sm bg-gray-700 px-2 py-0.5 rounded inline-block">
                                                 {iface.macAddress}
                                             </div>
                                         ) : (

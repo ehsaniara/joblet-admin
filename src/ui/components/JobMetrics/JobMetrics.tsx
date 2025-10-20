@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { apiService } from '../../services/apiService';
-import { useMetricsStream } from '../../hooks/useMetricsStream';
-import { Activity, Clock, Cpu, HardDrive, MemoryStick, Wifi, WifiOff, BarChart3 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { useDateFormatter } from '../../hooks/useDateFormatter';
+import React, {useEffect, useState} from 'react';
+import {apiService} from '../../services/apiService';
+import {useMetricsStream} from '../../hooks/useMetricsStream';
+import {Activity, BarChart3, Clock, Cpu, HardDrive, MemoryStick, Wifi, WifiOff} from 'lucide-react';
+import {Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis} from 'recharts';
+import {useDateFormatter} from '../../hooks/useDateFormatter';
 
 interface JobMetricsProps {
     jobId: string;
@@ -34,12 +34,13 @@ interface MetricPoint {
     limits: {
         [key: string]: any;
     };
+
     [key: string]: any;
 }
 
-export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
-    const { formatTime } = useDateFormatter();
-    const { metrics, connected, error: streamError, clearMetrics } = useMetricsStream(jobId);
+export const JobMetrics: React.FC<JobMetricsProps> = ({jobId}) => {
+    const {formatTime} = useDateFormatter();
+    const {metrics, connected, error: streamError, clearMetrics} = useMetricsStream(jobId);
     const [fallbackMetrics, setFallbackMetrics] = useState<MetricPoint[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
@@ -128,17 +129,18 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
     const chartData = prepareChartData();
 
     // Custom tooltip component with timestamp
-    const CustomTooltip = ({ active, payload, label }: any) => {
+    const CustomTooltip = ({active, payload, label}: any) => {
         if (active && payload && payload.length) {
             const data = payload[0].payload;
             return (
-                <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg p-3">
+                <div
+                    className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg p-3">
                     <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 border-b pb-1">
-                        <Clock className="h-3 w-3 inline mr-1" />
+                        <Clock className="h-3 w-3 inline mr-1"/>
                         {data.time}
                     </p>
                     {payload.map((entry: any, index: number) => (
-                        <p key={index} className="text-sm font-medium" style={{ color: entry.color }}>
+                        <p key={index} className="text-sm font-medium" style={{color: entry.color}}>
                             {entry.name}: {entry.value.toFixed(2)}{entry.unit || ''}
                         </p>
                     ))}
@@ -152,8 +154,8 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
     const calculateStats = () => {
         if (currentMetrics.length === 0) {
             return {
-                cpu: { average: null, peak: null },
-                memory: { average: null, peak: null }
+                cpu: {average: null, peak: null},
+                memory: {average: null, peak: null}
             };
         }
 
@@ -176,8 +178,8 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
         const memoryPeak = memoryValues.length > 0 ? Math.max(...memoryValues) : null;
 
         return {
-            cpu: { average: cpuAverage, peak: cpuPeak },
-            memory: { average: memoryAverage, peak: memoryPeak }
+            cpu: {average: cpuAverage, peak: cpuPeak},
+            memory: {average: memoryAverage, peak: memoryPeak}
         };
     };
 
@@ -196,10 +198,12 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
         return (
             <div className="space-y-4">
                 <h4 className="text-lg font-medium text-gray-900 dark:text-white">Job Metrics</h4>
-                <div className="bg-red-100 dark:bg-red-900 border border-red-400 text-red-700 dark:text-red-300 rounded p-4">
+                <div
+                    className="bg-red-100 dark:bg-red-900 border border-red-400 text-red-700 dark:text-red-300 rounded p-4">
                     <p className="font-medium">Error loading metrics</p>
                     <p className="text-sm">{error}</p>
-                    <p className="text-sm mt-2">This may be normal if the job hasn't started yet or if metrics collection is not enabled.</p>
+                    <p className="text-sm mt-2">This may be normal if the job hasn't started yet or if metrics
+                        collection is not enabled.</p>
                 </div>
             </div>
         );
@@ -209,9 +213,10 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
         return (
             <div className="space-y-4">
                 <h4 className="text-lg font-medium text-gray-900 dark:text-white">Job Metrics</h4>
-                <div className="bg-blue-100 dark:bg-blue-900 border border-blue-400 text-blue-700 dark:text-blue-300 rounded p-4">
+                <div
+                    className="bg-blue-100 dark:bg-blue-900 border border-blue-400 text-blue-700 dark:text-blue-300 rounded p-4">
                     <div className="flex items-start space-x-3">
-                        <BarChart3 className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                        <BarChart3 className="h-5 w-5 mt-0.5 flex-shrink-0"/>
                         <div>
                             <p className="font-medium">Job Metrics Not Available</p>
                             <p className="text-sm mt-1">
@@ -219,15 +224,18 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
                             </p>
                             <ul className="text-sm mt-2 list-disc list-inside space-y-1">
                                 <li>The job hasn't started running yet (queued or pending)</li>
-                                <li><strong>The job has already completed, failed, or was cancelled</strong> - Metrics are only retained while jobs are running</li>
-                                <li>The job is a workflow job that hasn't been executed</li>
+                                <li><strong>The job has already completed, failed, or was cancelled</strong> - Metrics
+                                    are only retained while jobs are running
+                                </li>
                                 <li>Metrics collection is not enabled on the Joblet server</li>
                                 <li className="text-yellow-700 dark:text-yellow-300">
-                                    <strong>You may be connected to the wrong node</strong> - Check the node selector in the sidebar
+                                    <strong>You may be connected to the wrong node</strong> - Check the node selector in
+                                    the sidebar
                                 </li>
                             </ul>
                             <p className="text-sm mt-3 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded p-2">
-                                <strong>💡 Tip:</strong> To view metrics for completed jobs, you need to configure a separate
+                                <strong>💡 Tip:</strong> To view metrics for completed jobs, you need to configure a
+                                separate
                                 <strong> Joblet Persist Service</strong> which stores historical metrics and logs.
                             </p>
                             <p className="text-sm mt-3">
@@ -240,7 +248,8 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
                                 <li>For running jobs, metrics update in real-time</li>
                             </ul>
                             <p className="text-sm mt-3 text-gray-600 dark:text-gray-400">
-                                Connection status: <strong className="font-mono">{connected ? 'Live stream active' : usingFallback ? 'Using fallback' : 'Connecting...'}</strong>
+                                Connection status: <strong
+                                className="font-mono">{connected ? 'Live stream active' : usingFallback ? 'Using fallback' : 'Connecting...'}</strong>
                             </p>
                         </div>
                     </div>
@@ -258,12 +267,12 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
                 <div className="flex items-center space-x-2">
                     {connected && !usingFallback ? (
                         <>
-                            <Wifi className="h-4 w-4 text-green-500" />
+                            <Wifi className="h-4 w-4 text-green-500"/>
                             <span className="text-sm text-green-600 dark:text-green-400">Live</span>
                         </>
                     ) : usingFallback ? (
                         <>
-                            <WifiOff className="h-4 w-4 text-yellow-500" />
+                            <WifiOff className="h-4 w-4 text-yellow-500"/>
                             <span className="text-sm text-yellow-600 dark:text-yellow-400">Static</span>
                         </>
                     ) : (
@@ -282,7 +291,7 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
                     {(latestMetric?.cpu?.usagePercent !== undefined || latestMetric?.cpu?.usage !== undefined) && (
                         <div className="bg-white dark:bg-gray-600 rounded-lg p-3 border">
                             <div className="flex items-center">
-                                <Cpu className="h-5 w-5 text-blue-500 mr-2" />
+                                <Cpu className="h-5 w-5 text-blue-500 mr-2"/>
                                 <div className="flex-1">
                                     <p className="text-sm font-medium text-gray-500 dark:text-gray-400">CPU Usage</p>
                                     <p className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -296,7 +305,7 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
                     {latestMetric?.memory?.current !== undefined && (
                         <div className="bg-white dark:bg-gray-600 rounded-lg p-3 border">
                             <div className="flex items-center">
-                                <MemoryStick className="h-5 w-5 text-green-500 mr-2" />
+                                <MemoryStick className="h-5 w-5 text-green-500 mr-2"/>
                                 <div className="flex-1">
                                     <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Memory Usage</p>
                                     <p className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -315,14 +324,15 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
                     {(latestMetric?.io?.totalReadBytes !== undefined || latestMetric?.io?.totalWriteBytes !== undefined || latestMetric?.io?.readBytes !== undefined || latestMetric?.io?.writeBytes !== undefined) && (
                         <div className="bg-white dark:bg-gray-600 rounded-lg p-3 border">
                             <div className="flex items-center">
-                                <HardDrive className="h-5 w-5 text-purple-500 mr-2" />
+                                <HardDrive className="h-5 w-5 text-purple-500 mr-2"/>
                                 <div className="flex-1">
                                     <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Disk I/O</p>
                                     <p className="text-sm font-semibold text-gray-900 dark:text-white">
                                         {(latestMetric.io.totalReadBytes !== undefined || latestMetric.io.readBytes !== undefined) && (
                                             <span>R: {formatBytes(latestMetric.io.totalReadBytes || latestMetric.io.readBytes || 0)}</span>
                                         )}
-                                        {(latestMetric.io.totalReadBytes !== undefined || latestMetric.io.readBytes !== undefined) && (latestMetric.io.totalWriteBytes !== undefined || latestMetric.io.writeBytes !== undefined) && <br />}
+                                        {(latestMetric.io.totalReadBytes !== undefined || latestMetric.io.readBytes !== undefined) && (latestMetric.io.totalWriteBytes !== undefined || latestMetric.io.writeBytes !== undefined) &&
+                                            <br/>}
                                         {(latestMetric.io.totalWriteBytes !== undefined || latestMetric.io.writeBytes !== undefined) && (
                                             <span>W: {formatBytes(latestMetric.io.totalWriteBytes || latestMetric.io.writeBytes || 0)}</span>
                                         )}
@@ -335,9 +345,10 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
                     {latestMetric?.memory?.current !== undefined && (
                         <div className="bg-white dark:bg-gray-600 rounded-lg p-3 border">
                             <div className="flex items-center">
-                                <Activity className="h-5 w-5 text-orange-500 mr-2" />
+                                <Activity className="h-5 w-5 text-orange-500 mr-2"/>
                                 <div className="flex-1">
-                                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Sample Interval</p>
+                                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Sample
+                                        Interval</p>
                                     <p className="text-sm font-semibold text-gray-900 dark:text-white">
                                         {latestMetric.sampleIntervalSeconds}s
                                     </p>
@@ -352,7 +363,7 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
             {chartData.length > 1 && (
                 <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
                     <div className="flex items-center mb-4">
-                        <BarChart3 className="h-5 w-5 text-blue-500 mr-2" />
+                        <BarChart3 className="h-5 w-5 text-blue-500 mr-2"/>
                         <h5 className="text-md font-medium text-gray-900 dark:text-white">Performance Trends</h5>
                     </div>
 
@@ -361,22 +372,22 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
                         {chartData.some(d => d.cpuUsage !== undefined) && (
                             <div className="bg-white dark:bg-gray-600 rounded-lg p-4">
                                 <h6 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center">
-                                    <Cpu className="h-4 w-4 text-blue-500 mr-2" />
+                                    <Cpu className="h-4 w-4 text-blue-500 mr-2"/>
                                     CPU Usage Over Time
                                 </h6>
                                 <ResponsiveContainer width="100%" height={200}>
                                     <AreaChart data={chartData}>
-                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <CartesianGrid strokeDasharray="3 3"/>
                                         <XAxis
                                             dataKey="timeIndex"
-                                            tick={{ fontSize: 12 }}
+                                            tick={{fontSize: 12}}
                                             tickFormatter={(index) => `${index + 1}`}
                                         />
                                         <YAxis
-                                            tick={{ fontSize: 12 }}
-                                            label={{ value: 'CPU %', angle: -90, position: 'insideLeft' }}
+                                            tick={{fontSize: 12}}
+                                            label={{value: 'CPU %', angle: -90, position: 'insideLeft'}}
                                         />
-                                        <Tooltip content={<CustomTooltip />} />
+                                        <Tooltip content={<CustomTooltip/>}/>
                                         <Area
                                             type="monotone"
                                             dataKey="cpuUsage"
@@ -393,22 +404,22 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
                         {chartData.some(d => d.memoryBytes > 0) && (
                             <div className="bg-white dark:bg-gray-600 rounded-lg p-4">
                                 <h6 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center">
-                                    <MemoryStick className="h-4 w-4 text-green-500 mr-2" />
+                                    <MemoryStick className="h-4 w-4 text-green-500 mr-2"/>
                                     Memory Usage Over Time
                                 </h6>
                                 <ResponsiveContainer width="100%" height={200}>
                                     <AreaChart data={chartData}>
-                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <CartesianGrid strokeDasharray="3 3"/>
                                         <XAxis
                                             dataKey="timeIndex"
-                                            tick={{ fontSize: 12 }}
+                                            tick={{fontSize: 12}}
                                             tickFormatter={(index) => `${index + 1}`}
                                         />
                                         <YAxis
-                                            tick={{ fontSize: 12 }}
-                                            label={{ value: 'MB', angle: -90, position: 'insideLeft' }}
+                                            tick={{fontSize: 12}}
+                                            label={{value: 'MB', angle: -90, position: 'insideLeft'}}
                                         />
-                                        <Tooltip content={<CustomTooltip />} />
+                                        <Tooltip content={<CustomTooltip/>}/>
                                         <Area
                                             type="monotone"
                                             dataKey="memoryMB"
@@ -425,35 +436,35 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
                         {chartData.some(d => d.diskReadMB !== undefined || d.diskWriteMB !== undefined) && (
                             <div className="bg-white dark:bg-gray-600 rounded-lg p-4">
                                 <h6 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center">
-                                    <HardDrive className="h-4 w-4 text-purple-500 mr-2" />
+                                    <HardDrive className="h-4 w-4 text-purple-500 mr-2"/>
                                     Disk I/O Over Time
                                 </h6>
                                 <ResponsiveContainer width="100%" height={200}>
                                     <LineChart data={chartData}>
-                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <CartesianGrid strokeDasharray="3 3"/>
                                         <XAxis
                                             dataKey="timeIndex"
-                                            tick={{ fontSize: 12 }}
+                                            tick={{fontSize: 12}}
                                             tickFormatter={(index) => `${index + 1}`}
                                         />
                                         <YAxis
-                                            tick={{ fontSize: 12 }}
-                                            label={{ value: 'MB', angle: -90, position: 'insideLeft' }}
+                                            tick={{fontSize: 12}}
+                                            label={{value: 'MB', angle: -90, position: 'insideLeft'}}
                                         />
-                                        <Tooltip content={<CustomTooltip />} />
+                                        <Tooltip content={<CustomTooltip/>}/>
                                         <Line
                                             type="monotone"
                                             dataKey="diskReadMB"
                                             stroke="#8b5cf6"
                                             strokeWidth={2}
-                                            dot={{ r: 3 }}
+                                            dot={{r: 3}}
                                         />
                                         <Line
                                             type="monotone"
                                             dataKey="diskWriteMB"
                                             stroke="#f59e0b"
                                             strokeWidth={2}
-                                            dot={{ r: 3 }}
+                                            dot={{r: 3}}
                                         />
                                     </LineChart>
                                 </ResponsiveContainer>
@@ -530,66 +541,67 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({ jobId }) => {
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
                         <thead className="bg-gray-100 dark:bg-gray-800">
-                            <tr>
-                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                    <Clock className="h-4 w-4 inline mr-1" />
-                                    Time
-                                </th>
-                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                    <Cpu className="h-4 w-4 inline mr-1" />
-                                    CPU %
-                                </th>
-                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                    <MemoryStick className="h-4 w-4 inline mr-1" />
-                                    Memory
-                                </th>
-                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                    <HardDrive className="h-4 w-4 inline mr-1" />
-                                    Disk I/O
-                                </th>
-                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                    <Activity className="h-4 w-4 inline mr-1" />
-                                    Interval
-                                </th>
-                            </tr>
+                        <tr>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                <Clock className="h-4 w-4 inline mr-1"/>
+                                Time
+                            </th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                <Cpu className="h-4 w-4 inline mr-1"/>
+                                CPU %
+                            </th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                <MemoryStick className="h-4 w-4 inline mr-1"/>
+                                Memory
+                            </th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                <HardDrive className="h-4 w-4 inline mr-1"/>
+                                Disk I/O
+                            </th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                <Activity className="h-4 w-4 inline mr-1"/>
+                                Interval
+                            </th>
+                        </tr>
                         </thead>
                         <tbody className="bg-white dark:bg-gray-700 divide-y divide-gray-200 dark:divide-gray-600">
-                            {currentMetrics.slice(-10).reverse().map((metric, index) => (
-                                <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-600">
-                                    <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                                        {formatDuration(metric.timestamp)}
-                                    </td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                                        {(metric.cpu?.usagePercent !== undefined || metric.cpu?.usage !== undefined) ?
-                                            `${(metric.cpu.usagePercent || metric.cpu.usage || 0).toFixed(1)}%` : '-'}
-                                    </td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                                        {metric.memory?.current !== undefined ?
-                                            formatBytes(metric.memory.current) : '-'}
-                                    </td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                                        {(metric.io?.totalReadBytes !== undefined || metric.io?.totalWriteBytes !== undefined || metric.io?.readBytes !== undefined || metric.io?.writeBytes !== undefined) ? (
-                                            <div>
-                                                {(metric.io.totalReadBytes !== undefined || metric.io.readBytes !== undefined) && (
-                                                    <div>R: {formatBytes(metric.io.totalReadBytes || metric.io.readBytes || 0)}</div>
-                                                )}
-                                                {(metric.io.totalWriteBytes !== undefined || metric.io.writeBytes !== undefined) && (
-                                                    <div>W: {formatBytes(metric.io.totalWriteBytes || metric.io.writeBytes || 0)}</div>
-                                                )}
-                                            </div>
-                                        ) : '-'}
-                                    </td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                                        {metric.sampleIntervalSeconds}s
-                                    </td>
-                                </tr>
-                            ))}
+                        {currentMetrics.slice(-10).reverse().map((metric, index) => (
+                            <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-600">
+                                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                                    {formatDuration(metric.timestamp)}
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                                    {(metric.cpu?.usagePercent !== undefined || metric.cpu?.usage !== undefined) ?
+                                        `${(metric.cpu.usagePercent || metric.cpu.usage || 0).toFixed(1)}%` : '-'}
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                                    {metric.memory?.current !== undefined ?
+                                        formatBytes(metric.memory.current) : '-'}
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                                    {(metric.io?.totalReadBytes !== undefined || metric.io?.totalWriteBytes !== undefined || metric.io?.readBytes !== undefined || metric.io?.writeBytes !== undefined) ? (
+                                        <div>
+                                            {(metric.io.totalReadBytes !== undefined || metric.io.readBytes !== undefined) && (
+                                                <div>R: {formatBytes(metric.io.totalReadBytes || metric.io.readBytes || 0)}</div>
+                                            )}
+                                            {(metric.io.totalWriteBytes !== undefined || metric.io.writeBytes !== undefined) && (
+                                                <div>W: {formatBytes(metric.io.totalWriteBytes || metric.io.writeBytes || 0)}</div>
+                                            )}
+                                        </div>
+                                    ) : '-'}
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                                    {metric.sampleIntervalSeconds}s
+                                </td>
+                            </tr>
+                        ))}
                         </tbody>
                     </table>
                 </div>
                 {currentMetrics.length > 10 && (
                     <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                        Showing last 10 of {currentMetrics.length} metrics. Use the rnx command line tool to view all metrics.
+                        Showing last 10 of {currentMetrics.length} metrics. Use the rnx command line tool to view all
+                        metrics.
                     </p>
                 )}
             </div>

@@ -13,7 +13,6 @@
   "nav": {
     "dashboard": "Panel",
     "jobs": "Trabajos",
-    "workflows": "Flujos de trabajo",
     "monitoring": "Monitoreo del sistema",
     "resources": "Recursos"
   },
@@ -104,18 +103,6 @@
     "liveUpdates": "Actualizaciones en vivo",
     "connecting": "Conectando...",
     "loadingSystemInfo": "Cargando información del sistema..."
-  },
-  "workflows": {
-    "title": "Flujos de trabajo",
-    "subtitle": "Gestiona y ejecuta tus configuraciones de flujo de trabajo",
-    "createWorkflow": "Crear flujo de trabajo",
-    "loadingWorkflows": "Cargando flujos de trabajo...",
-    "noWorkflows": "No se encontraron flujos de trabajo",
-    "browse": "Explorar",
-    "select": "Seleccionar",
-    "validate": "Validar",
-    "loadingDirectory": "Cargando directorio...",
-    "validationError": "Error de validación"
   },
   "resources": {
     "title": "Recursos",

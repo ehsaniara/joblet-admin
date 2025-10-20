@@ -1,4 +1,4 @@
-import {DetailedSystemInfo, Job, JobExecuteRequest, SystemMetrics, WorkflowTemplate} from '../types';
+import {DetailedSystemInfo, Job, JobExecuteRequest, SystemMetrics} from '../types';
 
 interface Volume {
     id?: string;
@@ -52,68 +52,6 @@ class APIService {
     // Job operations
     async getJobs(): Promise<Job[]> {
         return this.request<Job[]>('/jobs');
-    }
-
-    // Workflow operations
-    async getWorkflows(): Promise<any[]> {
-        return this.request<any[]>('/workflows');
-    }
-
-    async getWorkflow(workflowId: string): Promise<any> {
-        return this.request<any>(`/workflows/${workflowId}`);
-    }
-
-    async browseWorkflowDirectory(path?: string): Promise<{
-        currentPath: string;
-        parentPath: string | null;
-        directories: Array<{ name: string; path: string; type: string }>;
-        yamlFiles: Array<{ name: string; path: string; type: string; selectable: boolean }>;
-        otherFiles: Array<{ name: string; path: string; type: string; selectable: boolean }>;
-    }> {
-        const url = path ? `/workflows/browse?path=${encodeURIComponent(path)}` : '/workflows/browse';
-        return this.request<{
-            currentPath: string;
-            parentPath: string | null;
-            directories: Array<{ name: string; path: string; type: string }>;
-            yamlFiles: Array<{ name: string; path: string; type: string; selectable: boolean }>;
-            otherFiles: Array<{ name: string; path: string; type: string; selectable: boolean }>;
-        }>(url, {}, false); // Don't add node param for browsing
-    }
-
-    async validateWorkflow(filePath: string): Promise<{
-        valid: boolean;
-        requiredVolumes: string[];
-        missingVolumes: string[];
-        message: string;
-    }> {
-        return this.request<{
-            valid: boolean;
-            requiredVolumes: string[];
-            missingVolumes: string[];
-            message: string;
-        }>('/workflows/validate', {
-            method: 'POST',
-            body: JSON.stringify({filePath}),
-        });
-    }
-
-    async executeWorkflow(filePath: string, workflowName?: string, createMissingVolumes = false): Promise<{
-        workflowId: string;
-        status: string;
-        message: string;
-        availableWorkflows?: string[];
-        requiresWorkflowSelection?: boolean;
-    }> {
-        return this.request<{
-            workflowId: string;
-            status: string;
-            message: string;
-            availableWorkflows?: string[];
-            requiresWorkflowSelection?: boolean;
-        }>('/workflows/execute', {
-            method: 'POST',
-            body: JSON.stringify({filePath, workflowName, createMissingVolumes}),
-        });
     }
 
     async getJob(jobId: string): Promise<Job> {
@@ -217,21 +155,6 @@ class APIService {
     // Runtime operations
     async getRuntimes(): Promise<{ runtimes: Runtime[] }> {
         return this.request<{ runtimes: Runtime[] }>('/runtimes');
-    }
-
-    // Template operations
-    async executeTemplate(template: WorkflowTemplate): Promise<{ workflowId: string }> {
-        return this.request<{ workflowId: string }>('/template/execute', {
-            method: 'POST',
-            body: JSON.stringify(template),
-        });
-    }
-
-    async validateTemplate(template: WorkflowTemplate): Promise<{ valid: boolean; errors?: string[] }> {
-        return this.request<{ valid: boolean; errors?: string[] }>('/template/validate', {
-            method: 'POST',
-            body: JSON.stringify(template),
-        });
     }
 
     private async request<T>(

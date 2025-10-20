@@ -9,25 +9,20 @@ import {useDateFormatter} from '../../hooks/useDateFormatter';
 interface JobDetailProps {
     jobId: string;
     onClose: () => void;
-    isWorkflowJob?: boolean;
-    workflowJobs?: any[];
 }
 
 export const JobDetail: React.FC<JobDetailProps> = ({
-    jobId,
-    onClose,
-    isWorkflowJob = false,
-    workflowJobs = []
-}) => {
+                                                        jobId,
+                                                        onClose,
+                                                    }) => {
     const {formatDateTime} = useDateFormatter();
     const [activeTab, setActiveTab] = useState<'logs' | 'details' | 'metrics'>('logs');
     const [selectedJob, setSelectedJob] = useState<Job | null>(null);
     const [jobLoading, setJobLoading] = useState<boolean>(false);
     const [autoScroll, setAutoScroll] = useState<boolean>(true);
-    const [rnxJobId, setRnxJobId] = useState<string | null>(null);
     const logsContainerRef = useRef<HTMLDivElement>(null);
 
-    const {logs, connected, error: logError, clearLogs} = useLogStream(rnxJobId);
+    const {logs, connected, error: logError, clearLogs} = useLogStream(jobId);
 
     useEffect(() => {
         if (jobId) {
@@ -46,19 +41,6 @@ export const JobDetail: React.FC<JobDetailProps> = ({
         try {
             const jobData = await apiService.getJobStatus(jobId);
             setSelectedJob(jobData);
-
-            // For workflow jobs, check if they have started (have an RNX job ID)
-            if (isWorkflowJob) {
-                const workflowJob = workflowJobs.find(j => j.id === jobId);
-                if (workflowJob?.rnxJobId) {
-                    setRnxJobId(workflowJob.rnxJobId.toString());
-                } else {
-                    setRnxJobId(null);
-                }
-            } else {
-                // For regular jobs, the job ID is the RNX job ID
-                setRnxJobId(jobId);
-            }
         } catch (error) {
             console.error('Failed to fetch job details:', error);
         } finally {
@@ -89,96 +71,119 @@ export const JobDetail: React.FC<JobDetailProps> = ({
     };
 
     const generateRnxCommand = (job: Job): string => {
-        let command = 'rnx job run';
-
-        // Add command and args
-        if (job.command) {
-            command += ` ${job.command}`;
-            if (job.args && job.args.length > 0) {
-                command += ` ${job.args.join(' ')}`;
+        // Helper to escape shell special characters in a value
+        const shellEscape = (str: string): string => {
+            // If the string contains special characters, wrap in single quotes
+            // and escape any single quotes within by ending quote, adding escaped quote, starting quote again
+            if (/[^a-zA-Z0-9_\-.,/:=@]/.test(str)) {
+                return "'" + str.replace(/'/g, "'\\''") + "'";
             }
+            return str;
+        };
+
+        const parts: string[] = ['rnx job run'];
+
+        // Add command (quote if it contains spaces or special characters)
+        if (job.command) {
+            parts.push(shellEscape(job.command));
+        }
+
+        // Add args (each arg quoted separately if needed)
+        if (job.args && job.args.length > 0) {
+            job.args.forEach(arg => {
+                parts.push(shellEscape(arg));
+            });
         }
 
         // Add runtime
         if (job.runtime) {
-            command += ` \\\n  --runtime ${job.runtime}`;
+            parts.push(`--runtime ${shellEscape(job.runtime)}`);
         }
 
         // Add CPU limits (correct flag: --max-cpu)
         if (job.maxCPU !== undefined && job.maxCPU > 0) {
-            command += ` \\\n  --max-cpu ${job.maxCPU}`;
+            parts.push(`--max-cpu ${job.maxCPU}`);
         }
 
         // Add CPU cores
         if (job.cpuCores) {
-            command += ` \\\n  --cpu-cores ${job.cpuCores}`;
+            parts.push(`--cpu-cores ${job.cpuCores}`);
         }
 
         // Add memory limit (correct flag: --max-memory)
         if (job.maxMemory !== undefined && job.maxMemory > 0) {
-            command += ` \\\n  --max-memory ${job.maxMemory}`;
+            parts.push(`--max-memory ${job.maxMemory}`);
         }
 
         // Add IO limit (correct flag: --max-iobps)
         if (job.maxIOBPS !== undefined && job.maxIOBPS > 0) {
-            command += ` \\\n  --max-iobps ${job.maxIOBPS}`;
+            parts.push(`--max-iobps ${job.maxIOBPS}`);
         }
 
         // Add GPU settings
         if (job.gpuCount !== undefined && job.gpuCount > 0) {
-            command += ` \\\n  --gpu ${job.gpuCount}`;
+            parts.push(`--gpu ${job.gpuCount}`);
         }
 
         if (job.gpuMemoryMb !== undefined && job.gpuMemoryMb > 0) {
-            command += ` \\\n  --gpu-memory ${job.gpuMemoryMb}MB`;
+            parts.push(`--gpu-memory ${job.gpuMemoryMb}MB`);
         }
 
         // Add network
         if (job.network) {
-            command += ` \\\n  --network ${job.network}`;
+            parts.push(`--network ${shellEscape(job.network)}`);
         }
 
         // Add volumes
         if (job.volumes && job.volumes.length > 0) {
             job.volumes.forEach(volume => {
-                command += ` \\\n  --volume ${volume}`;
+                parts.push(`--volume ${shellEscape(volume)}`);
             });
         }
 
         // Add uploads (files)
         if (job.uploads && job.uploads.length > 0) {
             job.uploads.forEach(file => {
-                command += ` \\\n  --upload ${file}`;
+                parts.push(`--upload ${shellEscape(file)}`);
             });
         }
 
         // Add upload directories
         if (job.uploadDirs && job.uploadDirs.length > 0) {
             job.uploadDirs.forEach(dir => {
-                command += ` \\\n  --upload-dir ${dir}`;
+                parts.push(`--upload-dir ${shellEscape(dir)}`);
             });
         }
 
         // Add environment variables (use --env or -e)
         if (job.envVars && Object.keys(job.envVars).length > 0) {
             Object.entries(job.envVars).forEach(([key, value]) => {
-                command += ` \\\n  -e ${key}="${value}"`;
+                parts.push(`-e ${key}=${shellEscape(value)}`);
             });
         }
 
         // Add secret environment variables (use --secret-env or -s)
         if (job.secretEnvVars && Object.keys(job.secretEnvVars).length > 0) {
             Object.entries(job.secretEnvVars).forEach(([key, value]) => {
-                command += ` \\\n  -s ${key}="${value}"`;
+                parts.push(`-s ${key}=${shellEscape(value)}`);
             });
         }
 
         // Add scheduled time
         if (job.scheduledTime) {
-            command += ` \\\n  --schedule "${job.scheduledTime}"`;
+            parts.push(`--schedule ${shellEscape(job.scheduledTime)}`);
         }
 
-        return command;
+        // Join with line continuations for readability
+        // First part (rnx job run) + command + args on one line, then each flag on its own line
+        const commandAndArgs = parts.slice(0, 1 + (job.command ? 1 : 0) + (job.args?.length || 0));
+        const flags = parts.slice(commandAndArgs.length);
+
+        if (flags.length === 0) {
+            return commandAndArgs.join(' ');
+        }
+
+        return commandAndArgs.join(' ') + ' \\\n  ' + flags.join(' \\\n  ');
     };
 
     const copyToClipboard = (text: string) => {
@@ -192,7 +197,8 @@ export const JobDetail: React.FC<JobDetailProps> = ({
 
     return (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div className="relative top-16 mx-auto p-5 border w-11/12 max-w-[90vw] min-h-[80vh] shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div
+                className="relative top-16 mx-auto p-5 border w-11/12 max-w-[90vw] min-h-[80vh] shadow-lg rounded-md bg-white dark:bg-gray-800">
                 <div className="flex items-center justify-between pb-3 border-b">
                     <h3 className="text-lg font-medium text-gray-900 dark:text-white">
                         Job Details - {jobId}
@@ -216,7 +222,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                                     : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
                             }`}
                         >
-                            Logs {isWorkflowJob && <span className="text-xs">(Workflow)</span>}
+                            Logs
                         </button>
                         <button
                             onClick={() => setActiveTab('details')}
@@ -248,24 +254,22 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                             <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center space-x-4">
                                     <div className="flex items-center space-x-2">
-                                        <div className={`w-3 h-3 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                        <div
+                                            className={`w-3 h-3 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
                                         <span className="text-sm text-gray-600 dark:text-gray-400">
                                             {connected ? 'Connected' : 'Disconnected'}
-                                            {isWorkflowJob && ' (Workflow Job)'}
                                         </span>
                                     </div>
-                                    {/* Show auto-scroll for jobs that have logs available */}
-                                    {(rnxJobId || !isWorkflowJob) && (
-                                        <label className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-                                            <input
-                                                type="checkbox"
-                                                checked={autoScroll}
-                                                onChange={(e) => setAutoScroll(e.target.checked)}
-                                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                            />
-                                            <span>Auto-scroll</span>
-                                        </label>
-                                    )}
+                                    <label
+                                        className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
+                                        <input
+                                            type="checkbox"
+                                            checked={autoScroll}
+                                            onChange={(e) => setAutoScroll(e.target.checked)}
+                                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <span>Auto-scroll</span>
+                                    </label>
                                 </div>
                                 <button
                                     onClick={clearLogs}
@@ -275,8 +279,9 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                                 </button>
                             </div>
 
-                            {logError && !isWorkflowJob && (
-                                <div className="mb-4 p-3 bg-red-100 dark:bg-red-900 border border-red-400 text-red-700 dark:text-red-300 rounded">
+                            {logError && (
+                                <div
+                                    className="mb-4 p-3 bg-red-100 dark:bg-red-900 border border-red-400 text-red-700 dark:text-red-300 rounded">
                                     Error: {logError}
                                 </div>
                             )}
@@ -285,29 +290,18 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                                 ref={logsContainerRef}
                                 className="bg-black text-green-400 p-4 rounded-lg h-[70vh] overflow-y-auto font-mono text-sm"
                             >
-                                {/* Display appropriate message based on job state */}
-                                {!rnxJobId && isWorkflowJob ? (
+                                {logs.length === 0 ? (
                                     <div className="text-gray-500">
-                                        {(() => {
-                                            const job = workflowJobs.find(j => j.id === jobId);
-                                            const status = job?.status?.toUpperCase();
-                                            if (status === 'CANCELLED' || status === 'CANCELED') return 'Job was cancelled. No logs available.';
-                                            if (status === 'QUEUED' || status === 'PENDING') return 'Job is queued/pending. No logs yet.';
-                                            return 'Job has not started executing. No logs available.';
-                                        })()}
-                                    </div>
-                                ) : logs.length === 0 ? (
-                                    <div className="text-gray-500">
-                                        {isWorkflowJob ? "Loading workflow job logs..." : "No logs available yet..."}
+                                        No logs available yet...
                                     </div>
                                 ) : (
                                     logs.map((log, index) => (
                                         <div key={index} className={`mb-1 whitespace-pre-wrap ${
                                             log.type === 'system' ? 'text-gray-400 opacity-80' :
-                                            log.type === 'info' ? 'text-gray-200' :
-                                            log.type === 'error' ? 'text-red-400' :
-                                            log.type === 'connection' ? 'text-blue-400' :
-                                            'text-green-400'
+                                                log.type === 'info' ? 'text-gray-200' :
+                                                    log.type === 'error' ? 'text-red-400' :
+                                                        log.type === 'connection' ? 'text-blue-400' :
+                                                            'text-green-400'
                                         }`}>
                                             {log.message}
                                         </div>
@@ -323,28 +317,35 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                             {jobLoading ? (
                                 <div className="flex items-center justify-center py-8">
                                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-                                    <span className="ml-3 text-gray-600 dark:text-gray-400">Loading job details...</span>
+                                    <span
+                                        className="ml-3 text-gray-600 dark:text-gray-400">Loading job details...</span>
                                 </div>
                             ) : selectedJob ? (
                                 <>
                                     {/* Basic Information */}
                                     <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                                        <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Basic Information</h4>
+                                        <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Basic
+                                            Information</h4>
                                         <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
-                                                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Job ID</dt>
+                                                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Job
+                                                    ID
+                                                </dt>
                                                 <dd className="mt-1 text-sm text-gray-900 dark:text-white font-mono">{selectedJob.id}</dd>
                                             </div>
                                             {selectedJob.name && (
                                                 <div>
-                                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Job Name</dt>
+                                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Job
+                                                        Name
+                                                    </dt>
                                                     <dd className="mt-1 text-sm text-gray-900 dark:text-white">{selectedJob.name}</dd>
                                                 </div>
                                             )}
                                             <div>
                                                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Status</dt>
                                                 <dd className="mt-1">
-                                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedJob.status)}`}>
+                                                    <span
+                                                        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedJob.status)}`}>
                                                         {selectedJob.status}
                                                     </span>
                                                 </dd>
@@ -367,15 +368,27 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                                                     <dd className="mt-1 text-sm text-gray-900 dark:text-white">{selectedJob.network}</dd>
                                                 </div>
                                             )}
+                                            {selectedJob.nodeId && (
+                                                <div>
+                                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Node
+                                                        ID
+                                                    </dt>
+                                                    <dd className="mt-1 text-sm text-gray-900 dark:text-white font-mono">{selectedJob.nodeId}</dd>
+                                                </div>
+                                            )}
                                             {selectedJob.startTime && (
                                                 <div>
-                                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Start Time</dt>
+                                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Start
+                                                        Time
+                                                    </dt>
                                                     <dd className="mt-1 text-sm text-gray-900 dark:text-white">{formatDateTime(selectedJob.startTime)}</dd>
                                                 </div>
                                             )}
                                             {selectedJob.endTime && (
                                                 <div>
-                                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">End Time</dt>
+                                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">End
+                                                        Time
+                                                    </dt>
                                                     <dd className="mt-1 text-sm text-gray-900 dark:text-white">{formatDateTime(selectedJob.endTime)}</dd>
                                                 </div>
                                             )}
@@ -387,7 +400,9 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                                             )}
                                             {selectedJob.exitCode !== undefined && (
                                                 <div>
-                                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Exit Code</dt>
+                                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Exit
+                                                        Code
+                                                    </dt>
                                                     <dd className="mt-1 text-sm text-gray-900 dark:text-white">{selectedJob.exitCode}</dd>
                                                 </div>
                                             )}
@@ -397,14 +412,17 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                                     {/* RNX Command Preview */}
                                     <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
                                         <div className="flex items-center justify-between mb-4">
-                                            <h4 className="text-lg font-medium text-gray-900 dark:text-white">RNX Command Preview</h4>
+                                            <h4 className="text-lg font-medium text-gray-900 dark:text-white">RNX
+                                                Command Preview</h4>
                                             <button
                                                 onClick={() => copyToClipboard(generateRnxCommand(selectedJob))}
                                                 className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center space-x-1"
                                                 title="Copy to clipboard"
                                             >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor"
+                                                     viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                                          d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                                                 </svg>
                                                 <span>Copy</span>
                                             </button>
@@ -421,23 +439,32 @@ export const JobDetail: React.FC<JobDetailProps> = ({
 
                                     {/* Resource Limits */}
                                     <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                                        <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Resource Limits</h4>
+                                        <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Resource
+                                            Limits</h4>
                                         <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
-                                                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Max CPU</dt>
+                                                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Max
+                                                    CPU
+                                                </dt>
                                                 <dd className="mt-1 text-sm text-gray-900 dark:text-white">{selectedJob.maxCPU}%</dd>
                                             </div>
                                             <div>
-                                                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Max Memory</dt>
+                                                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Max
+                                                    Memory
+                                                </dt>
                                                 <dd className="mt-1 text-sm text-gray-900 dark:text-white">{selectedJob.maxMemory} MB</dd>
                                             </div>
                                             <div>
-                                                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Max IO BPS</dt>
+                                                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Max
+                                                    IO BPS
+                                                </dt>
                                                 <dd className="mt-1 text-sm text-gray-900 dark:text-white">{selectedJob.maxIOBPS} bytes/s</dd>
                                             </div>
                                             {selectedJob.cpuCores && (
                                                 <div>
-                                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">CPU Cores</dt>
+                                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">CPU
+                                                        Cores
+                                                    </dt>
                                                     <dd className="mt-1 text-sm text-gray-900 dark:text-white">{selectedJob.cpuCores}</dd>
                                                 </div>
                                             )}
@@ -450,7 +477,8 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                                             <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Volumes</h4>
                                             <ul className="list-disc list-inside space-y-1">
                                                 {selectedJob.volumes.map((volume, index) => (
-                                                    <li key={index} className="text-sm text-gray-900 dark:text-white font-mono">{volume}</li>
+                                                    <li key={index}
+                                                        className="text-sm text-gray-900 dark:text-white font-mono">{volume}</li>
                                                 ))}
                                             </ul>
                                         </div>
@@ -459,7 +487,8 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                                     {/* Environment Variables */}
                                     {selectedJob.envVars && Object.keys(selectedJob.envVars).length > 0 && (
                                         <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                                            <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Environment Variables</h4>
+                                            <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Environment
+                                                Variables</h4>
                                             <dl className="space-y-2">
                                                 {Object.entries(selectedJob.envVars).map(([key, value]) => (
                                                     <div key={key}>
@@ -477,7 +506,8 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                                             <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Dependencies</h4>
                                             <ul className="list-disc list-inside space-y-1">
                                                 {selectedJob.dependsOn.map((dep, index) => (
-                                                    <li key={index} className="text-sm text-gray-900 dark:text-white font-mono">{dep}</li>
+                                                    <li key={index}
+                                                        className="text-sm text-gray-900 dark:text-white font-mono">{dep}</li>
                                                 ))}
                                             </ul>
                                         </div>
@@ -493,7 +523,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({
 
                     {/* Metrics Tab */}
                     {activeTab === 'metrics' && (
-                        <JobMetrics jobId={rnxJobId || jobId}/>
+                        <JobMetrics jobId={jobId}/>
                     )}
                 </div>
             </div>

@@ -13,7 +13,6 @@
   "nav": {
     "dashboard": "Dashboard",
     "jobs": "Jobs",
-    "workflows": "Workflows",
     "monitoring": "System Monitoring",
     "resources": "Resources"
   },
@@ -88,7 +87,7 @@
   "help": {
     "title": "Joblet Admin Help",
     "overview": "Overview",
-    "overviewText": "Joblet provides an enterprise-grade job execution platform with a modern React-based web interface for visual workflow management.",
+    "overviewText": "Joblet provides an enterprise-grade job execution platform with a modern React-based web interface for job management and monitoring.",
     "mainSections": "Main Sections",
     "keyFeatures": "Key Features",
     "gettingStarted": "Getting Started",
@@ -104,18 +103,6 @@
     "liveUpdates": "Live Updates",
     "connecting": "Connecting...",
     "loadingSystemInfo": "Loading system information..."
-  },
-  "workflows": {
-    "title": "Workflows",
-    "subtitle": "Manage and execute your workflow configurations",
-    "createWorkflow": "Create Workflow",
-    "loadingWorkflows": "Loading workflows...",
-    "noWorkflows": "No workflows found",
-    "browse": "Browse",
-    "select": "Select",
-    "validate": "Validate",
-    "loadingDirectory": "Loading directory...",
-    "validationError": "Validation Error"
   },
   "resources": {
     "title": "Resources",
