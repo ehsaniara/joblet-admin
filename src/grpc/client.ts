@@ -190,9 +190,20 @@ export class JobletGrpcClient {
         return client.GetJobLogs({uuid: jobId});
     }
 
-    public streamJobMetrics(jobId: string): grpc.ClientReadableStream<any> {
+    public streamJobTelemetry(jobId: string, types?: string[]): grpc.ClientReadableStream<any> {
         const client = this.getClient(this.jobService);
-        return client.GetJobMetrics({uuid: jobId});
+        return client.StreamJobTelemetry({job_uuid: jobId, types: types || []});
+    }
+
+    public getJobTelemetry(jobId: string, types?: string[], startTime?: number, endTime?: number, limit?: number): grpc.ClientReadableStream<any> {
+        const client = this.getClient(this.jobService);
+        return client.GetJobTelemetry({
+            job_uuid: jobId,
+            types: types || [],
+            start_time: startTime || 0,
+            end_time: endTime || 0,
+            limit: limit || 0
+        });
     }
 
     // Network Service methods

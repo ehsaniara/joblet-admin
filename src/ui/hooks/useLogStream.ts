@@ -15,6 +15,9 @@ interface UseLogStreamReturn {
     clearLogs: () => void;
 }
 
+// Maximum number of messages to track for deduplication to prevent unbounded memory growth
+const MAX_DEDUP_SIZE = 1000;
+
 export const useLogStream = (jobId: string | null): UseLogStreamReturn => {
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [connected, setConnected] = useState<boolean>(false);
@@ -22,12 +25,28 @@ export const useLogStream = (jobId: string | null): UseLogStreamReturn => {
     const wsRef = useRef<WebSocket | null>(null);
     const mountedRef = useRef<boolean>(true);
     const seenMessages = useRef<Set<string>>(new Set());
+    const seenMessagesQueue = useRef<string[]>([]); // Track insertion order for LRU eviction
     const {selectedNode} = useNode();
     const {formatTime} = useDateFormatter();
+
+    // Helper to add a message to the dedup set with LRU eviction
+    const addToSeenMessages = useCallback((key: string) => {
+        seenMessages.current.add(key);
+        seenMessagesQueue.current.push(key);
+
+        // Evict oldest entries if over limit
+        while (seenMessagesQueue.current.length > MAX_DEDUP_SIZE) {
+            const oldKey = seenMessagesQueue.current.shift();
+            if (oldKey) {
+                seenMessages.current.delete(oldKey);
+            }
+        }
+    }, []);
 
     const clearLogs = useCallback(() => {
         setLogs([]);
         seenMessages.current.clear();
+        seenMessagesQueue.current = [];
     }, []);
 
     useEffect(() => {
@@ -113,8 +132,8 @@ export const useLogStream = (jobId: string | null): UseLogStreamReturn => {
                     return;
                 }
 
-                // Mark as seen
-                seenMessages.current.add(messageKey);
+                // Mark as seen with LRU eviction
+                addToSeenMessages(messageKey);
 
                 setLogs(prev => [...prev, {
                     message,
@@ -133,7 +152,8 @@ export const useLogStream = (jobId: string | null): UseLogStreamReturn => {
                     return;
                 }
 
-                seenMessages.current.add(messageKey);
+                // Mark as seen with LRU eviction
+                addToSeenMessages(messageKey);
 
                 setLogs(prev => [...prev, {
                     message,
@@ -161,7 +181,7 @@ export const useLogStream = (jobId: string | null): UseLogStreamReturn => {
             }
             wsRef.current = null;
         };
-    }, [jobId, selectedNode, formatTime]);
+    }, [jobId, selectedNode, formatTime, addToSeenMessages]);
 
     return {logs, connected, error, clearLogs};
 };

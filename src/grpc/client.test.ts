@@ -51,12 +51,14 @@ describe('JobletGrpcClient - Proto Service Coverage', () => {
                 cancel: vi.fn(),
             })),
             ListJobs: vi.fn((req, callback) => callback(null, {jobs: []})),
-            StreamJobMetrics: vi.fn(() => ({
+            StreamJobTelemetry: vi.fn(() => ({
                 on: vi.fn(),
                 cancel: vi.fn(),
             })),
-            GetJobMetricsHistory: vi.fn((req, callback) => callback(null, {samples: []})),
-            GetJobMetricsSummary: vi.fn((req, callback) => callback(null, {summary: {}})),
+            GetJobTelemetry: vi.fn(() => ({
+                on: vi.fn(),
+                cancel: vi.fn(),
+            })),
         };
 
         mockNetworkServiceClient = {
@@ -163,19 +165,14 @@ describe('JobletGrpcClient - Proto Service Coverage', () => {
             expect(typeof mockJobServiceClient.ListJobs).toBe('function');
         });
 
-        it('should have StreamJobMetrics streaming method', () => {
-            expect(mockJobServiceClient.StreamJobMetrics).toBeDefined();
-            expect(typeof mockJobServiceClient.StreamJobMetrics).toBe('function');
+        it('should have StreamJobTelemetry streaming method', () => {
+            expect(mockJobServiceClient.StreamJobTelemetry).toBeDefined();
+            expect(typeof mockJobServiceClient.StreamJobTelemetry).toBe('function');
         });
 
-        it('should have GetJobMetricsHistory method', () => {
-            expect(mockJobServiceClient.GetJobMetricsHistory).toBeDefined();
-            expect(typeof mockJobServiceClient.GetJobMetricsHistory).toBe('function');
-        });
-
-        it('should have GetJobMetricsSummary method', () => {
-            expect(mockJobServiceClient.GetJobMetricsSummary).toBeDefined();
-            expect(typeof mockJobServiceClient.GetJobMetricsSummary).toBe('function');
+        it('should have GetJobTelemetry streaming method', () => {
+            expect(mockJobServiceClient.GetJobTelemetry).toBeDefined();
+            expect(typeof mockJobServiceClient.GetJobTelemetry).toBe('function');
         });
     });
 
@@ -284,11 +281,11 @@ describe('JobletGrpcClient - Proto Service Coverage', () => {
     });
 
     describe('Method Count Validation', () => {
-        it('JobService should have exactly 11 methods', () => {
+        it('JobService should have exactly 10 methods', () => {
             const methods = Object.keys(mockJobServiceClient).filter(
                 key => typeof mockJobServiceClient[key] === 'function'
             );
-            expect(methods.length).toBe(11);
+            expect(methods.length).toBe(10);
         });
 
         it('NetworkService should have exactly 3 methods', () => {

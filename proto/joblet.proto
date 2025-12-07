@@ -16,8 +16,11 @@ service JobService {
   rpc GetJobLogs(GetJobLogsReq) returns (stream DataChunk);
   rpc ListJobs(EmptyRequest) returns (Jobs){}
 
-  // Job metrics operations
-  rpc GetJobMetrics(JobMetricsRequest) returns (stream JobMetricsSample){}
+  // Unified telemetry (metrics + eBPF activity events)
+  // Stream live telemetry for a running job
+  rpc StreamJobTelemetry(StreamTelemetryRequest) returns (stream TelemetryEvent){}
+  // Get historical telemetry for a completed job
+  rpc GetJobTelemetry(GetTelemetryRequest) returns (stream TelemetryEvent){}
 }
 
 // Network service
@@ -592,224 +595,75 @@ message RuntimeSpecInfo {
   string architecture = 4;         // Architecture
 }
 
-// Job Metrics Messages
+// =============================================================================
+// Unified Telemetry Messages (Metrics + eBPF Activity Events)
+// =============================================================================
 
-message JobMetricsRequest {
-  string uuid = 1;                 // Job UUID identifier
+// Request to stream live telemetry for a running job
+message StreamTelemetryRequest {
+  string job_uuid = 1;             // Job UUID identifier
+  repeated string types = 2;       // Filter by types: ["metrics", "exec", "connect", "file"] or empty for all
 }
 
-message JobMetricsSummaryRequest {
-  string uuid = 1;                 // Job UUID identifier
-  int32 periodSeconds = 2;         // Aggregation period (default: 300s = 5min)
+// Request to get historical telemetry for a completed job
+message GetTelemetryRequest {
+  string job_uuid = 1;             // Job UUID identifier
+  repeated string types = 2;       // Filter by types: ["metrics", "exec", "connect", "file"] or empty for all
+  int64 start_time = 3;            // Start time in Unix nanoseconds (0 = beginning)
+  int64 end_time = 4;              // End time in Unix nanoseconds (0 = now)
+  int32 limit = 5;                 // Maximum events to return (0 = no limit)
 }
 
-message JobMetricsSummaryResponse {
-  JobMetricsAggregate cpu = 1;
-  JobMetricsAggregate memory = 2;
-  JobMetricsAggregate io = 3;
-  JobMetricsAggregate network = 4;
+// Unified telemetry event containing either metrics or activity data
+message TelemetryEvent {
+  int64 timestamp = 1;             // Unix timestamp in nanoseconds
+  string job_id = 2;               // Job UUID
+  string type = 3;                 // Event type: "metrics", "exec", "connect", "file"
+
+  oneof data {
+    TelemetryMetricsData metrics = 10;
+    TelemetryExecData exec = 11;
+    TelemetryConnectData connect = 12;
+    TelemetryFileData file = 13;
+  }
 }
 
-message JobMetricsSample {
-  string jobId = 1;
-  int64 timestamp = 2;             // Unix timestamp in seconds
-  int32 sampleIntervalSeconds = 3;
-
-  // Metrics
-  JobCPUMetrics cpu = 4;
-  JobMemoryMetrics memory = 5;
-  JobIOMetrics io = 6;
-  JobNetworkMetrics network = 7;
-  JobProcessMetrics process = 8;
-  repeated JobGPUMetrics gpu = 9;
-
-  // Metadata
-  string cgroupPath = 10;
-  JobResourceLimits limits = 11;
-  repeated int32 gpuAllocation = 12;
+// Metrics data from cgroups v2 (periodic sampling)
+message TelemetryMetricsData {
+  double cpu_percent = 1;          // CPU usage percentage
+  int64 memory_bytes = 2;          // Current memory usage in bytes
+  int64 memory_limit = 3;          // Memory limit in bytes
+  int64 disk_read_bytes = 4;       // Total disk bytes read
+  int64 disk_write_bytes = 5;      // Total disk bytes written
+  int64 net_recv_bytes = 6;        // Total network bytes received
+  int64 net_sent_bytes = 7;        // Total network bytes sent
+  double gpu_percent = 8;          // GPU utilization percentage (0 if no GPU)
+  int64 gpu_memory_bytes = 9;      // GPU memory usage in bytes (0 if no GPU)
 }
 
-message JobResourceLimits {
-  int32 cpu = 1;                   // CPU percentage limit
-  int64 memory = 2;                // Memory limit in bytes
-  int32 io = 3;                    // I/O limit in bytes/sec
+// Process execution event from eBPF (execve tracing)
+message TelemetryExecData {
+  uint32 pid = 1;                  // Process ID
+  string binary = 2;               // Binary path (e.g., "/usr/bin/python")
+  repeated string args = 3;        // Command arguments
+  int32 exit_code = 4;             // Exit code (only set on process exit)
+  uint32 ppid = 5;                 // Parent process ID
 }
 
-message JobCPUMetrics {
-  uint64 usageUsec = 1;            // Total CPU time in microseconds
-  uint64 userUsec = 2;             // User mode CPU time
-  uint64 systemUsec = 3;           // Kernel mode CPU time
-  uint64 nrPeriods = 4;            // Number of enforcement periods
-  uint64 nrThrottled = 5;          // Number of throttled periods
-  uint64 throttledUsec = 6;        // Total throttled time
-  double usagePercent = 7;         // Current CPU usage %
-  double throttlePercent = 8;      // Percentage of time throttled
-
-  // PSI (Pressure Stall Information)
-  double pressureSome10 = 9;
-  double pressureSome60 = 10;
-  double pressureSome300 = 11;
-  double pressureFull10 = 12;
-  double pressureFull60 = 13;
-  double pressureFull300 = 14;
+// Network connection event from eBPF (connect tracing)
+message TelemetryConnectData {
+  uint32 pid = 1;                  // Process ID that initiated connection
+  string address = 2;              // Remote IP address (IPv4 or IPv6)
+  uint32 port = 3;                 // Remote port number
+  string protocol = 4;             // Protocol: "tcp" or "udp"
+  string local_address = 5;        // Local IP address (optional)
+  uint32 local_port = 6;           // Local port number (optional)
 }
 
-message JobMemoryMetrics {
-  uint64 current = 1;              // Current memory usage in bytes
-  uint64 max = 2;                  // Memory limit in bytes
-  double usagePercent = 3;         // Memory usage percentage
-
-  // Detailed memory stats
-  uint64 anon = 4;                 // Anonymous memory
-  uint64 file = 5;                 // File-backed memory (cache)
-  uint64 kernelStack = 6;          // Kernel stack memory
-  uint64 slab = 7;                 // Kernel slab memory
-  uint64 sock = 8;                 // Socket buffer memory
-  uint64 shmem = 9;                // Shared memory
-  uint64 fileMapped = 10;          // Memory-mapped files
-  uint64 fileDirty = 11;           // Dirty page cache
-  uint64 fileWriteback = 12;       // Pages under writeback
-  uint64 pgFault = 13;             // Page fault count
-  uint64 pgMajFault = 14;          // Major page fault count
-  uint64 oomEvents = 15;           // OOM killer invocations
-  uint64 oomKill = 16;             // Processes killed by OOM
-
-  // PSI
-  double pressureSome10 = 17;
-  double pressureSome60 = 18;
-  double pressureSome300 = 19;
-  double pressureFull10 = 20;
-  double pressureFull60 = 21;
-  double pressureFull300 = 22;
-}
-
-message JobIOMetrics {
-  map<string, DeviceIOMetrics> devices = 1; // Per-device metrics
-
-  // Aggregated metrics
-  uint64 totalReadBytes = 2;
-  uint64 totalWriteBytes = 3;
-  uint64 totalReadOps = 4;
-  uint64 totalWriteOps = 5;
-  uint64 totalDiscardBytes = 6;
-  uint64 totalDiscardOps = 7;
-
-  // Calculated rates
-  double readBPS = 8;              // Read bandwidth (bytes/sec)
-  double writeBPS = 9;             // Write bandwidth (bytes/sec)
-  double readIOPS = 10;            // Read IOPS
-  double writeIOPS = 11;           // Write IOPS
-
-  // PSI
-  double pressureSome10 = 12;
-  double pressureSome60 = 13;
-  double pressureSome300 = 14;
-  double pressureFull10 = 15;
-  double pressureFull60 = 16;
-  double pressureFull300 = 17;
-}
-
-message DeviceIOMetrics {
-  string device = 1;               // Device identifier (major:minor)
-  uint64 readBytes = 2;
-  uint64 writeBytes = 3;
-  uint64 readOps = 4;
-  uint64 writeOps = 5;
-  uint64 discardBytes = 6;
-  uint64 discardOps = 7;
-}
-
-message JobNetworkMetrics {
-  map<string, NetworkInterfaceMetrics> interfaces = 1;
-
-  // Aggregated metrics
-  uint64 totalRxBytes = 2;
-  uint64 totalTxBytes = 3;
-  uint64 totalRxPackets = 4;
-  uint64 totalTxPackets = 5;
-  uint64 totalRxErrors = 6;
-  uint64 totalTxErrors = 7;
-  uint64 totalRxDropped = 8;
-  uint64 totalTxDropped = 9;
-
-  // Calculated rates
-  double rxBPS = 10;               // Receive bandwidth (bytes/sec)
-  double txBPS = 11;               // Transmit bandwidth (bytes/sec)
-}
-
-message NetworkInterfaceMetrics {
-  string interface = 1;
-  uint64 rxBytes = 2;
-  uint64 txBytes = 3;
-  uint64 rxPackets = 4;
-  uint64 txPackets = 5;
-  uint64 rxErrors = 6;
-  uint64 txErrors = 7;
-  uint64 rxDropped = 8;
-  uint64 txDropped = 9;
-}
-
-message JobProcessMetrics {
-  uint64 current = 1;              // Current number of processes/threads
-  uint64 max = 2;                  // Maximum PIDs allowed
-  uint64 events = 3;               // PID limit hit count
-  uint64 threads = 4;              // Total thread count
-  uint64 running = 5;              // Running processes
-  uint64 sleeping = 6;             // Sleeping processes
-  uint64 stopped = 7;              // Stopped processes
-  uint64 zombie = 8;               // Zombie processes
-  uint64 openFDs = 9;              // Open file descriptors
-  uint64 maxFDs = 10;              // FD limit
-}
-
-message JobGPUMetrics {
-  // Device identification
-  int32 index = 1;                 // GPU device index
-  string uuid = 2;                 // GPU unique identifier
-  string name = 3;                 // GPU model name
-  string computeCapability = 4;    // CUDA compute capability
-  string driverVersion = 5;        // NVIDIA driver version
-
-  // Utilization metrics
-  double utilization = 6;          // GPU core utilization (0-100%)
-  uint64 memoryUsed = 7;           // GPU memory used (bytes)
-  uint64 memoryTotal = 8;          // GPU memory total (bytes)
-  uint64 memoryFree = 9;           // GPU memory free (bytes)
-  double memoryPercent = 10;       // Memory utilization percentage
-  double encoderUtil = 11;         // Video encoder utilization
-  double decoderUtil = 12;         // Video decoder utilization
-
-  // Performance metrics
-  uint64 smClock = 13;             // Streaming Multiprocessor clock (MHz)
-  uint64 memoryClock = 14;         // Memory clock speed (MHz)
-  double pcieThroughputRx = 15;    // PCIe receive throughput (MB/s)
-  double pcieThroughputTx = 16;    // PCIe transmit throughput (MB/s)
-
-  // Thermal & Power
-  double temperature = 17;         // GPU temperature (Celsius)
-  double temperatureMemory = 18;   // Memory temperature
-  double powerDraw = 19;           // Current power draw (Watts)
-  double powerLimit = 20;          // Power limit (Watts)
-  double fanSpeed = 21;            // Fan speed percentage
-
-  // Error & Health
-  uint64 eccErrorsSingle = 22;     // Single-bit ECC errors
-  uint64 eccErrorsDouble = 23;     // Double-bit ECC errors
-  uint64 xidErrors = 24;           // XID error events
-  uint64 retiredPages = 25;        // Retired memory pages
-  uint64 throttleReasons = 26;     // Throttling reason bitmask
-
-  // Process metrics
-  uint64 processesCount = 27;      // Number of processes using GPU
-  uint64 processesMemory = 28;     // Memory used by job processes
-  string computeMode = 29;         // Compute mode (exclusive/shared)
-}
-
-message JobMetricsAggregate {
-  double min = 1;
-  double max = 2;
-  double avg = 3;
-  double p50 = 4;                  // Median
-  double p95 = 5;
-  double p99 = 6;
+// File access event from eBPF (open/read/write tracing)
+message TelemetryFileData {
+  uint32 pid = 1;                  // Process ID
+  string path = 2;                 // File path
+  string operation = 3;            // Operation: "read", "write", "create", "delete"
+  int64 bytes = 4;                 // Bytes read/written (if applicable)
 }
