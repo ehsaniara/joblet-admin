@@ -1,7 +1,7 @@
-import {BrowserRouter as Router, Route, Routes} from 'react-router-dom';
+import {BrowserRouter as Router, Route, Routes, Navigate} from 'react-router-dom';
 import Layout from './components/Layout/Layout';
-import Dashboard from './pages/Dashboard';
 import Jobs from './pages/Jobs';
+import Runtimes from './pages/Runtimes';
 import Monitoring from './pages/Monitoring';
 import Resources from './pages/Resources';
 import {NodeProvider} from './contexts/NodeContext';
@@ -16,8 +16,9 @@ function App() {
                     <Router>
                         <Layout>
                             <Routes>
-                                <Route path="/" element={<Dashboard/>}/>
-                                <Route path="/jobs" element={<Jobs/>}/>
+                                <Route path="/" element={<Jobs/>}/>
+                                <Route path="/jobs" element={<Navigate to="/" replace/>}/>
+                                <Route path="/runtimes" element={<Runtimes/>}/>
                                 <Route path="/monitoring" element={<Monitoring/>}/>
                                 <Route path="/resources" element={<Resources/>}/>
                             </Routes>

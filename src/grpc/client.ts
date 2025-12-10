@@ -73,14 +73,55 @@ export class JobletGrpcClient {
         // Clear client cache on construction to avoid stale clients from hot reload
         this.clientCache = {};
         this.loadProtobuf();
+        // Auto-select first available node if 'default' doesn't exist
+        this.initializeDefaultNode();
+    }
+
+    private initializeDefaultNode() {
+        try {
+            const config = this.loadRnxConfig();
+            if (!config.nodes[this.currentNode]) {
+                const availableNodes = Object.keys(config.nodes);
+                if (availableNodes.length > 0) {
+                    this.currentNode = availableNodes[0];
+                    console.log(`Node 'default' not found, using first available node: ${this.currentNode}`);
+                }
+            }
+        } catch (e) {
+            console.error('Failed to initialize default node:', e);
+        }
+    }
+
+    public getAvailableNodes(): string[] {
+        try {
+            const config = this.loadRnxConfig();
+            return Object.keys(config.nodes);
+        } catch (e) {
+            return [];
+        }
     }
 
     public setNode(node: string) {
-        if (this.currentNode !== node) {
-            this.currentNode = node;
+        // Validate node exists in config, fallback to first available if not
+        let targetNode = node;
+        try {
+            const config = this.loadRnxConfig();
+            if (!config.nodes[node]) {
+                const availableNodes = Object.keys(config.nodes);
+                if (availableNodes.length > 0) {
+                    targetNode = availableNodes[0];
+                    console.log(`Node '${node}' not found, using '${targetNode}' instead`);
+                }
+            }
+        } catch (e) {
+            console.error('Failed to validate node:', e);
+        }
+
+        if (this.currentNode !== targetNode) {
+            this.currentNode = targetNode;
             this.credentials = undefined; // Reset credentials to force reload
             // Clear client cache for this node to force reconnection
-            const cacheKey = `${node}:`;
+            const cacheKey = `${targetNode}:`;
             Object.keys(this.clientCache)
                 .filter(key => key.startsWith(cacheKey))
                 .forEach(key => {
@@ -190,14 +231,31 @@ export class JobletGrpcClient {
         return client.GetJobLogs({uuid: jobId});
     }
 
-    public streamJobTelemetry(jobId: string, types?: string[]): grpc.ClientReadableStream<any> {
+    // Job Metrics APIs (cgroups resource usage - sampled every 5s)
+    public streamJobMetrics(jobId: string): grpc.ClientReadableStream<any> {
         const client = this.getClient(this.jobService);
-        return client.StreamJobTelemetry({job_uuid: jobId, types: types || []});
+        return client.StreamJobMetrics({job_uuid: jobId});
     }
 
-    public getJobTelemetry(jobId: string, types?: string[], startTime?: number, endTime?: number, limit?: number): grpc.ClientReadableStream<any> {
+    public getJobMetrics(jobId: string, startTime?: number, endTime?: number, limit?: number): grpc.ClientReadableStream<any> {
         const client = this.getClient(this.jobService);
-        return client.GetJobTelemetry({
+        return client.GetJobMetrics({
+            job_uuid: jobId,
+            start_time: startTime || 0,
+            end_time: endTime || 0,
+            limit: limit || 0
+        });
+    }
+
+    // Job Telematics APIs (eBPF security events - event-driven)
+    public streamJobTelematics(jobId: string, types?: string[]): grpc.ClientReadableStream<any> {
+        const client = this.getClient(this.jobService);
+        return client.StreamJobTelematics({job_uuid: jobId, types: types || []});
+    }
+
+    public getJobTelematics(jobId: string, types?: string[], startTime?: number, endTime?: number, limit?: number): grpc.ClientReadableStream<any> {
+        const client = this.getClient(this.jobService);
+        return client.GetJobTelematics({
             job_uuid: jobId,
             types: types || [],
             start_time: startTime || 0,
@@ -398,7 +456,7 @@ export class JobletGrpcClient {
                 const deadline = new Date();
                 deadline.setSeconds(deadline.getSeconds() + 10);
 
-                client.GetRuntimeInfo({name}, {deadline}, (error: any, response: any) => {
+                client.GetRuntimeInfo({runtime: name}, {deadline}, (error: any, response: any) => {
                     if (error) reject(error);
                     else resolve(response);
                 });
@@ -421,9 +479,35 @@ export class JobletGrpcClient {
         });
     }
 
-    public streamingInstallRuntimeFromGithub(request: any): grpc.ClientReadableStream<any> {
+    // Build runtime from YAML specification (streaming progress)
+    public buildRuntime(yamlContent: string, options?: {
+        dryRun?: boolean;
+        verbose?: boolean;
+        forceRebuild?: boolean;
+    }): grpc.ClientReadableStream<any> {
         const client = this.getClient(this.runtimeService);
-        return client.StreamingInstallRuntimeFromGithub(request);
+        return client.BuildRuntime({
+            yaml_content: yamlContent,
+            dry_run: options?.dryRun || false,
+            verbose: options?.verbose || false,
+            force_rebuild: options?.forceRebuild || false
+        });
+    }
+
+    // Validate runtime YAML without building
+    public async validateRuntimeYAML(yamlContent: string): Promise<any> {
+        return this.retryRequest(() => {
+            return new Promise((resolve, reject) => {
+                const client = this.getClient(this.runtimeService);
+                const deadline = new Date();
+                deadline.setSeconds(deadline.getSeconds() + 30);
+
+                client.ValidateRuntimeYAML({yaml_content: yamlContent}, {deadline}, (error: any, response: any) => {
+                    if (error) reject(error);
+                    else resolve(response);
+                });
+            });
+        });
     }
 
     public async removeRuntime(name: string): Promise<any> {

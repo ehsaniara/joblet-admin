@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useState} from 'react';
 import {apiService} from '../services/apiService';
+import {useNode} from '../contexts/NodeContext';
 
 interface Volume {
     id?: string;
@@ -21,6 +22,12 @@ export const useVolumes = (): UseVolumesReturn => {
     const [volumes, setVolumes] = useState<Volume[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
+    const {selectedNode} = useNode();
+
+    // Sync apiService with selected node
+    useEffect(() => {
+        apiService.setNode(selectedNode);
+    }, [selectedNode]);
 
     const fetchVolumes = useCallback(async (): Promise<void> => {
         try {
@@ -33,13 +40,13 @@ export const useVolumes = (): UseVolumesReturn => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [selectedNode]); // Re-fetch when node changes
 
     const refetch = useCallback(() => {
         fetchVolumes();
     }, [fetchVolumes]);
 
-    // Volumes are static resources, no auto-refresh needed
+    // Volumes are node-specific, refetch when node changes
 
     useEffect(() => {
         fetchVolumes();

@@ -13,9 +13,11 @@ export const JobActivity: React.FC<JobActivityProps> = ({jobId}) => {
     const [filter, setFilter] = useState<FilterType>('all');
     const containerRef = useRef<HTMLDivElement>(null);
 
-    const {events, connected, error, clearEvents} = useTelemetryStream(
+    const MAX_EVENTS = 1000;
+    const {events, connected, error, clearEvents, totalEventsReceived} = useTelemetryStream(
         jobId,
-        ['EXEC', 'NET', 'ACCEPT', 'SEND', 'RECV', 'MMAP', 'MPROTECT']
+        ['EXEC', 'NET', 'ACCEPT', 'SEND', 'RECV', 'MMAP', 'MPROTECT'],
+        MAX_EVENTS
     );
 
     const filteredEvents = useMemo(() => {
@@ -31,13 +33,14 @@ export const JobActivity: React.FC<JobActivityProps> = ({jobId}) => {
 
     const formatTimestamp = (ts: number) => {
         const date = new Date(ts * 1000);
-        return date.toLocaleTimeString('en-US', {
+        const timeStr = date.toLocaleTimeString('en-US', {
             hour12: false,
             hour: '2-digit',
             minute: '2-digit',
-            second: '2-digit',
-            fractionalSecondDigits: 3
+            second: '2-digit'
         });
+        const ms = date.getMilliseconds().toString().padStart(3, '0');
+        return `${timeStr}.${ms}`;
     };
 
     const formatDuration = (ns: number | undefined) => {
@@ -334,34 +337,45 @@ export const JobActivity: React.FC<JobActivityProps> = ({jobId}) => {
             </div>
 
             {/* Stats */}
-            <div className="flex items-center flex-wrap gap-4 text-sm">
-                <div className="flex items-center space-x-1" title="Process executions (execve syscall)">
-                    <Terminal className="w-4 h-4 text-green-500"/>
-                    <span className="text-gray-600 dark:text-gray-400">{eventCounts.EXEC}</span>
+            <div className="flex items-center justify-between flex-wrap gap-4 text-sm">
+                <div className="flex items-center flex-wrap gap-4">
+                    <div className="flex items-center space-x-1" title="Process executions (execve syscall)">
+                        <Terminal className="w-4 h-4 text-green-500"/>
+                        <span className="text-gray-600 dark:text-gray-400">{eventCounts.EXEC}</span>
+                    </div>
+                    <div className="flex items-center space-x-1" title="Outgoing connections (connect syscall)">
+                        <ArrowUpRight className="w-4 h-4 text-blue-500"/>
+                        <span className="text-gray-600 dark:text-gray-400">{eventCounts.NET}</span>
+                    </div>
+                    <div className="flex items-center space-x-1" title="Incoming connections (accept syscall)">
+                        <ArrowDownLeft className="w-4 h-4 text-purple-500"/>
+                        <span className="text-gray-600 dark:text-gray-400">{eventCounts.ACCEPT}</span>
+                    </div>
+                    <div className="flex items-center space-x-1" title="Data sent over sockets">
+                        <Send className="w-4 h-4 text-cyan-500"/>
+                        <span className="text-gray-600 dark:text-gray-400">{eventCounts.SEND}</span>
+                    </div>
+                    <div className="flex items-center space-x-1" title="Data received over sockets">
+                        <Download className="w-4 h-4 text-teal-500"/>
+                        <span className="text-gray-600 dark:text-gray-400">{eventCounts.RECV}</span>
+                    </div>
+                    <div className="flex items-center space-x-1" title="Memory mapping operations">
+                        <Cpu className="w-4 h-4 text-orange-500"/>
+                        <span className="text-gray-600 dark:text-gray-400">{eventCounts.MMAP}</span>
+                    </div>
+                    <div className="flex items-center space-x-1" title="Memory protection changes">
+                        <Shield className="w-4 h-4 text-red-500"/>
+                        <span className="text-gray-600 dark:text-gray-400">{eventCounts.MPROTECT}</span>
+                    </div>
                 </div>
-                <div className="flex items-center space-x-1" title="Outgoing connections (connect syscall)">
-                    <ArrowUpRight className="w-4 h-4 text-blue-500"/>
-                    <span className="text-gray-600 dark:text-gray-400">{eventCounts.NET}</span>
-                </div>
-                <div className="flex items-center space-x-1" title="Incoming connections (accept syscall)">
-                    <ArrowDownLeft className="w-4 h-4 text-purple-500"/>
-                    <span className="text-gray-600 dark:text-gray-400">{eventCounts.ACCEPT}</span>
-                </div>
-                <div className="flex items-center space-x-1" title="Data sent over sockets">
-                    <Send className="w-4 h-4 text-cyan-500"/>
-                    <span className="text-gray-600 dark:text-gray-400">{eventCounts.SEND}</span>
-                </div>
-                <div className="flex items-center space-x-1" title="Data received over sockets">
-                    <Download className="w-4 h-4 text-teal-500"/>
-                    <span className="text-gray-600 dark:text-gray-400">{eventCounts.RECV}</span>
-                </div>
-                <div className="flex items-center space-x-1" title="Memory mapping operations">
-                    <Cpu className="w-4 h-4 text-orange-500"/>
-                    <span className="text-gray-600 dark:text-gray-400">{eventCounts.MMAP}</span>
-                </div>
-                <div className="flex items-center space-x-1" title="Memory protection changes">
-                    <Shield className="w-4 h-4 text-red-500"/>
-                    <span className="text-gray-600 dark:text-gray-400">{eventCounts.MPROTECT}</span>
+                <div className="text-xs text-gray-500" title={`Showing last ${MAX_EVENTS} events. Total received: ${totalEventsReceived}`}>
+                    {totalEventsReceived > MAX_EVENTS ? (
+                        <span className="text-yellow-500">
+                            Showing {events.length}/{totalEventsReceived} (last {MAX_EVENTS})
+                        </span>
+                    ) : (
+                        <span>{events.length} events</span>
+                    )}
                 </div>
             </div>
 
@@ -374,20 +388,16 @@ export const JobActivity: React.FC<JobActivityProps> = ({jobId}) => {
             {/* Events List */}
             <div
                 ref={containerRef}
-                className="bg-gray-900 rounded-lg h-[60vh] overflow-y-auto"
+                className="bg-gray-900 rounded-lg h-[45vh] overflow-y-auto"
             >
                 {filteredEvents.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-gray-500">
-                        <Activity className="w-12 h-12 mb-4 opacity-50"/>
-                        <p>No activity events yet...</p>
-                        <p className="text-sm mt-2">
+                        <Activity className="w-10 h-10 mb-3 opacity-50"/>
+                        <p>No telematics events yet...</p>
+                        <p className="text-sm mt-1">
                             {connected
-                                ? 'Waiting for eBPF telemetry events from the job.'
-                                : 'Connecting to telemetry stream...'}
-                        </p>
-                        <p className="text-xs mt-4 text-gray-600 max-w-md text-center">
-                            eBPF telemetry captures syscall events including process executions,
-                            network connections, socket I/O, and memory operations from within the job container.
+                                ? 'Waiting for eBPF telematics events from the job.'
+                                : 'Connecting to telematics stream...'}
                         </p>
                     </div>
                 ) : (
@@ -395,9 +405,9 @@ export const JobActivity: React.FC<JobActivityProps> = ({jobId}) => {
                         {filteredEvents.map((event, index) => (
                             <div
                                 key={index}
-                                className={`p-3 border-l-4 ${getEventColor(event.type)} hover:bg-gray-800 transition-colors`}
+                                className={`p-2 border-l-4 ${getEventColor(event.type)} hover:bg-gray-800 transition-colors`}
                             >
-                                <div className="flex items-start space-x-3">
+                                <div className="flex items-start space-x-2">
                                     <div className="flex-shrink-0 mt-1">
                                         {getEventIcon(event.type)}
                                     </div>
@@ -420,11 +430,22 @@ export const JobActivity: React.FC<JobActivityProps> = ({jobId}) => {
             </div>
 
             {/* Info Footer */}
-            <div className="text-xs text-gray-500 dark:text-gray-400">
+            <div className="text-xs text-gray-500 dark:text-gray-400 space-y-2">
                 <p>
                     Activity monitoring powered by eBPF. Captures real-time syscall events: process executions (execve),
                     network connections (connect/accept), socket I/O (send/recv), and memory operations (mmap/mprotect).
                 </p>
+                <div className="mt-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                        CLI Command Reference
+                    </label>
+                    <pre className="bg-gray-900 text-green-400 p-3 rounded-md text-sm overflow-x-auto font-mono">
+rnx job telematics {jobId}
+                    </pre>
+                    <p className="text-gray-500 mt-2 text-xs">
+                        Stream telematics events for this job. Add <code className="text-yellow-400 bg-gray-900 px-1 rounded">--types=exec,net</code> to filter event types.
+                    </p>
+                </div>
             </div>
         </div>
     );

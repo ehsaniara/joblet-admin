@@ -25,6 +25,29 @@ interface Runtime {
     description: string;
 }
 
+interface RuntimeDetails {
+    name: string;
+    language: string;
+    version: string;
+    languageVersion: string;
+    description: string;
+    sizeBytes: number;
+    packages: string[];
+    available: boolean;
+    requirements: {
+        architectures: string[];
+        gpu: boolean;
+    } | null;
+    libraries: string[];
+    environment: Record<string, string>;
+    buildInfo: {
+        builtAt: string;
+        builtWith: string;
+        platform: string;
+    } | null;
+    originalYaml: string;
+}
+
 interface Node {
     name: string;
     status: string;
@@ -155,6 +178,16 @@ class APIService {
     // Runtime operations
     async getRuntimes(): Promise<{ runtimes: Runtime[] }> {
         return this.request<{ runtimes: Runtime[] }>('/runtimes');
+    }
+
+    async deleteRuntime(runtimeName: string): Promise<{ success: boolean; message: string }> {
+        return this.request<{ success: boolean; message: string }>(`/runtimes/${encodeURIComponent(runtimeName)}`, {
+            method: 'DELETE',
+        });
+    }
+
+    async getRuntimeDetails(runtimeName: string): Promise<RuntimeDetails> {
+        return this.request<RuntimeDetails>(`/runtimes/${encodeURIComponent(runtimeName)}`);
     }
 
     private async request<T>(

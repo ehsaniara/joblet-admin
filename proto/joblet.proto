@@ -16,11 +16,17 @@ service JobService {
   rpc GetJobLogs(GetJobLogsReq) returns (stream DataChunk);
   rpc ListJobs(EmptyRequest) returns (Jobs){}
 
-  // Unified telemetry (metrics + eBPF activity events)
-  // Stream live telemetry for a running job
-  rpc StreamJobTelemetry(StreamTelemetryRequest) returns (stream TelemetryEvent){}
-  // Get historical telemetry for a completed job
-  rpc GetJobTelemetry(GetTelemetryRequest) returns (stream TelemetryEvent){}
+  // Job Metrics (resource usage from cgroups - sampled every 5s)
+  // Stream live metrics for a running job
+  rpc StreamJobMetrics(StreamJobMetricsRequest) returns (stream JobMetricsEvent){}
+  // Get historical metrics for a completed job
+  rpc GetJobMetrics(GetJobMetricsRequest) returns (stream JobMetricsEvent){}
+
+  // Job Telematics (eBPF security events - event-driven)
+  // Stream live telematics events for a running job
+  rpc StreamJobTelematics(StreamJobTelematicsRequest) returns (stream TelematicsEvent){}
+  // Get historical telematics events for a completed job
+  rpc GetJobTelematics(GetJobTelematicsRequest) returns (stream TelematicsEvent){}
 }
 
 // Network service
@@ -48,13 +54,14 @@ service RuntimeService {
   rpc ListRuntimes(EmptyRequest) returns (RuntimesRes){}
   rpc GetRuntimeInfo(RuntimeInfoReq) returns (RuntimeInfoRes){}
   rpc TestRuntime(RuntimeTestReq) returns (RuntimeTestRes){}
-
-  rpc InstallRuntimeFromGithub(InstallRuntimeRequest) returns (InstallRuntimeResponse){}
-  rpc InstallRuntimeFromLocal(InstallRuntimeFromLocalRequest) returns (InstallRuntimeResponse){}
-  rpc StreamingInstallRuntimeFromGithub(InstallRuntimeRequest) returns (stream RuntimeInstallationChunk){}
-  rpc StreamingInstallRuntimeFromLocal(InstallRuntimeFromLocalRequest) returns (stream RuntimeInstallationChunk){}
-  rpc ValidateRuntimeSpec(ValidateRuntimeSpecRequest) returns (ValidateRuntimeSpecResponse){}
   rpc RemoveRuntime(RuntimeRemoveReq) returns (RuntimeRemoveRes){}
+
+  // BuildRuntime builds a runtime from a YAML specification
+  // The build process runs on the server and streams progress back to the client
+  rpc BuildRuntime(BuildRuntimeRequest) returns (stream BuildRuntimeProgress){}
+
+  // ValidateRuntimeYAML validates a runtime YAML specification without building
+  rpc ValidateRuntimeYAML(ValidateRuntimeYAMLRequest) returns (ValidateRuntimeYAMLResponse){}
 }
 
 message Jobs{
@@ -185,29 +192,70 @@ message DataChunk {
   bytes payload = 1;
 }
 
-message RuntimeInstallationChunk {
-  oneof chunk_type {
-    RuntimeInstallationProgress progress = 1;
-    RuntimeInstallationLog log = 2;
-    RuntimeInstallationResult result = 3;
+// BuildRuntime messages
+
+message BuildRuntimeRequest {
+  string yaml_content = 1;         // YAML specification content
+  bool dry_run = 2;                // If true, validate only without building
+  bool verbose = 3;                // If true, include detailed logs
+  bool force_rebuild = 4;          // If true, rebuild even if runtime exists
+}
+
+message BuildRuntimeProgress {
+  oneof progress_type {
+    BuildPhaseProgress phase = 1;
+    BuildLogLine log = 2;
+    BuildResult result = 3;
   }
 }
 
-message RuntimeInstallationProgress {
-  string message = 1;
-  int32 step = 2;
-  int32 total_steps = 3;
+message BuildPhaseProgress {
+  int32 phase_number = 1;          // Current phase (1-14)
+  int32 total_phases = 2;          // Total phases (14)
+  string phase_name = 3;           // e.g., "Installing system packages"
+  string message = 4;              // Progress message
 }
 
-message RuntimeInstallationLog {
-  bytes data = 1;
+message BuildLogLine {
+  string level = 1;                // "debug", "info", "warn", "error"
+  string message = 2;              // Log message
+  int64 timestamp = 3;             // Unix timestamp in nanoseconds
 }
 
-message RuntimeInstallationResult {
-  bool success = 1;
-  string message = 2;
-  string runtime_spec = 3;
-  string install_path = 4;
+message BuildResult {
+  bool success = 1;                // Build succeeded
+  string message = 2;              // Final message
+  string runtime_name = 3;         // Runtime name (e.g., "python-3.11-ml")
+  string runtime_version = 4;      // Runtime version
+  string install_path = 5;         // Path where runtime was installed
+  int64 size_bytes = 6;            // Total size of the runtime
+  int64 build_duration_ms = 7;     // Build duration in milliseconds
+}
+
+// ValidateRuntimeYAML messages
+
+message ValidateRuntimeYAMLRequest {
+  string yaml_content = 1;         // YAML specification content
+}
+
+message ValidateRuntimeYAMLResponse {
+  bool valid = 1;                  // Is the YAML valid
+  string message = 2;              // Validation message
+  repeated string errors = 3;      // List of validation errors
+  repeated string warnings = 4;    // List of warnings
+  RuntimeYAMLInfo spec_info = 5;   // Parsed spec info (if valid)
+}
+
+message RuntimeYAMLInfo {
+  string name = 1;                 // Runtime name
+  string version = 2;              // Version
+  string language = 3;             // Language (python, java, node, etc.)
+  string language_version = 4;     // Language version (e.g., "3.11")
+  string description = 5;          // Description
+  repeated string pip_packages = 6;   // Pip packages to install
+  repeated string npm_packages = 7;   // NPM packages to install
+  bool has_hooks = 8;              // Has pre/post install hooks
+  bool requires_gpu = 9;           // Requires GPU
 }
 
 message CreateNetworkReq {
@@ -460,12 +508,23 @@ message RuntimesRes {
 message RuntimeInfo {
   string name = 1;                  // Runtime name (e.g., "python-3.11-ml")
   string language = 2;              // Language (e.g., "python")
-  string version = 3;               // Version (e.g., "3.11")
+  string version = 3;               // Runtime version (e.g., "1.0.0")
   string description = 4;           // Description
   int64 sizeBytes = 5;              // Size in bytes
-  repeated string packages = 6;     // Installed packages
+  repeated string packages = 6;     // Installed packages (pip, npm, etc.)
   bool available = 7;               // Ready to use
   RuntimeRequirements requirements = 8;
+  string language_version = 9;      // Language version (e.g., "3.11" for Python)
+  repeated string libraries = 10;   // Library patterns copied (e.g., "libopenblas*")
+  map<string, string> environment = 11; // Environment variables
+  RuntimeBuildInfo build_info = 12; // Build metadata
+  string original_yaml = 13;        // Original runtime.yaml content (for display)
+}
+
+message RuntimeBuildInfo {
+  string built_at = 1;              // When built (RFC3339)
+  string built_with = 2;            // Builder version
+  string platform = 3;              // Platform (e.g., "ubuntu-amd64")
 }
 
 message RuntimeRequirements {
@@ -537,46 +596,6 @@ message Timestamp {
   int32 nanos = 2;
 }
 
-message InstallRuntimeRequest {
-  string runtimeSpec = 1;          // Runtime spec
-  string repository = 2;           // GitHub repo
-  string branch = 3;               // Branch
-  string path = 4;                 // Path in repo
-  bool forceReinstall = 5;         // Force reinstall
-  string registry_url = 6;         // Registry URL (for installing from external registry)
-}
-
-message InstallRuntimeResponse {
-  string buildJobUuid = 1;         // Install job UUID
-  string runtimeSpec = 2;          // Runtime spec
-  string status = 3;               // Status
-  string message = 4;              // Message
-  string repository = 5;           // Repo
-  string resolvedPath = 6;         // Path in repo
-}
-
-message InstallRuntimeFromLocalRequest {
-  string runtimeSpec = 1;          // Runtime spec
-  repeated RuntimeFile files = 2;   // Files to upload
-  bool forceReinstall = 3;         // Force reinstall
-}
-
-message RuntimeFile {
-  string path = 1;                 // Path in runtime dir
-  bytes content = 2;               // Content
-  bool executable = 3;             // Make executable
-}
-
-message ValidateRuntimeSpecRequest {
-  string runtimeSpec = 1;          // Runtime spec to validate
-}
-
-message ValidateRuntimeSpecResponse {
-  bool valid = 1;                  // Is valid
-  string message = 2;              // Message
-  string normalizedSpec = 3;       // Normalized spec
-  RuntimeSpecInfo specInfo = 4;    // Parsed spec
-}
 
 message RuntimeRemoveReq {
   string runtime = 1;              // Runtime to remove
@@ -588,82 +607,138 @@ message RuntimeRemoveRes {
   int64 freedSpaceBytes = 3;       // Space freed
 }
 
-message RuntimeSpecInfo {
-  string language = 1;             // Language
-  string version = 2;              // Version
-  repeated string variants = 3;    // Variants
-  string architecture = 4;         // Architecture
+// =============================================================================
+// Job Metrics Messages (Resource Usage - Time-based Sampling)
+// =============================================================================
+
+// Request to stream live metrics for a running job
+message StreamJobMetricsRequest {
+  string job_uuid = 1;             // Job UUID identifier
+}
+
+// Request to get historical metrics for a completed job
+message GetJobMetricsRequest {
+  string job_uuid = 1;             // Job UUID identifier
+  int64 start_time = 2;            // Start time in Unix nanoseconds (0 = beginning)
+  int64 end_time = 3;              // End time in Unix nanoseconds (0 = now)
+  int32 limit = 4;                 // Maximum events to return (0 = no limit)
+}
+
+// Job metrics event (resource usage from cgroups v2)
+message JobMetricsEvent {
+  int64 timestamp = 1;             // Unix timestamp in nanoseconds
+  string job_id = 2;               // Job UUID
+  double cpu_percent = 3;          // CPU usage percentage
+  int64 memory_bytes = 4;          // Current memory usage in bytes
+  int64 memory_limit = 5;          // Memory limit in bytes
+  int64 disk_read_bytes = 6;       // Total disk bytes read
+  int64 disk_write_bytes = 7;      // Total disk bytes written
+  int64 net_recv_bytes = 8;        // Total network bytes received
+  int64 net_sent_bytes = 9;        // Total network bytes sent
+  double gpu_percent = 10;         // GPU utilization percentage (0 if no GPU)
+  int64 gpu_memory_bytes = 11;     // GPU memory usage in bytes (0 if no GPU)
 }
 
 // =============================================================================
-// Unified Telemetry Messages (Metrics + eBPF Activity Events)
+// Job Telematics Messages (eBPF Security Events - Event-driven)
 // =============================================================================
 
-// Request to stream live telemetry for a running job
-message StreamTelemetryRequest {
+// Request to stream live telematics events for a running job
+message StreamJobTelematicsRequest {
   string job_uuid = 1;             // Job UUID identifier
-  repeated string types = 2;       // Filter by types: ["metrics", "exec", "connect", "file"] or empty for all
+  repeated string types = 2;       // Filter by types: ["exec", "connect", "accept", "file", "mmap", "mprotect"] or empty for all
 }
 
-// Request to get historical telemetry for a completed job
-message GetTelemetryRequest {
+// Request to get historical telematics events for a completed job
+message GetJobTelematicsRequest {
   string job_uuid = 1;             // Job UUID identifier
-  repeated string types = 2;       // Filter by types: ["metrics", "exec", "connect", "file"] or empty for all
+  repeated string types = 2;       // Filter by types: ["exec", "connect", "accept", "file", "mmap", "mprotect"] or empty for all
   int64 start_time = 3;            // Start time in Unix nanoseconds (0 = beginning)
   int64 end_time = 4;              // End time in Unix nanoseconds (0 = now)
   int32 limit = 5;                 // Maximum events to return (0 = no limit)
 }
 
-// Unified telemetry event containing either metrics or activity data
-message TelemetryEvent {
+// Telematics event from eBPF tracing
+message TelematicsEvent {
   int64 timestamp = 1;             // Unix timestamp in nanoseconds
   string job_id = 2;               // Job UUID
-  string type = 3;                 // Event type: "metrics", "exec", "connect", "file"
+  string type = 3;                 // Event type: "exec", "connect", "accept", "file", "mmap", "mprotect"
 
   oneof data {
-    TelemetryMetricsData metrics = 10;
-    TelemetryExecData exec = 11;
-    TelemetryConnectData connect = 12;
-    TelemetryFileData file = 13;
+    TelematicsExecData exec = 10;
+    TelematicsConnectData connect = 11;
+    TelematicsAcceptData accept = 12;
+    TelematicsFileData file = 13;
+    TelematicsMmapData mmap = 14;
+    TelematicsMprotectData mprotect = 15;
+    TelematicsSocketDataData socket_data = 16;
   }
 }
 
-// Metrics data from cgroups v2 (periodic sampling)
-message TelemetryMetricsData {
-  double cpu_percent = 1;          // CPU usage percentage
-  int64 memory_bytes = 2;          // Current memory usage in bytes
-  int64 memory_limit = 3;          // Memory limit in bytes
-  int64 disk_read_bytes = 4;       // Total disk bytes read
-  int64 disk_write_bytes = 5;      // Total disk bytes written
-  int64 net_recv_bytes = 6;        // Total network bytes received
-  int64 net_sent_bytes = 7;        // Total network bytes sent
-  double gpu_percent = 8;          // GPU utilization percentage (0 if no GPU)
-  int64 gpu_memory_bytes = 9;      // GPU memory usage in bytes (0 if no GPU)
-}
-
-// Process execution event from eBPF (execve tracing)
-message TelemetryExecData {
+// Process execution event (execve syscall)
+message TelematicsExecData {
   uint32 pid = 1;                  // Process ID
-  string binary = 2;               // Binary path (e.g., "/usr/bin/python")
-  repeated string args = 3;        // Command arguments
-  int32 exit_code = 4;             // Exit code (only set on process exit)
-  uint32 ppid = 5;                 // Parent process ID
+  uint32 ppid = 2;                 // Parent process ID
+  string binary = 3;               // Binary path (e.g., "/usr/bin/python")
+  repeated string args = 4;        // Command arguments
+  int32 exit_code = 5;             // Exit code (only set on process exit)
 }
 
-// Network connection event from eBPF (connect tracing)
-message TelemetryConnectData {
+// Outgoing network connection event (connect syscall)
+message TelematicsConnectData {
   uint32 pid = 1;                  // Process ID that initiated connection
-  string address = 2;              // Remote IP address (IPv4 or IPv6)
-  uint32 port = 3;                 // Remote port number
+  string dst_addr = 2;             // Destination IP address (IPv4 or IPv6)
+  uint32 dst_port = 3;             // Destination port number
   string protocol = 4;             // Protocol: "tcp" or "udp"
-  string local_address = 5;        // Local IP address (optional)
-  uint32 local_port = 6;           // Local port number (optional)
+  string src_addr = 5;             // Source IP address
+  uint32 src_port = 6;             // Source port number
 }
 
-// File access event from eBPF (open/read/write tracing)
-message TelemetryFileData {
+// Incoming connection accept event (accept syscall)
+message TelematicsAcceptData {
+  uint32 pid = 1;                  // Server process ID
+  string src_addr = 2;             // Client IP address
+  uint32 src_port = 3;             // Client port
+  string dst_addr = 4;             // Server IP address
+  uint32 dst_port = 5;             // Server port (listening port)
+  string protocol = 6;             // Protocol: "tcp"
+}
+
+// File access event (open/read/write syscalls)
+message TelematicsFileData {
   uint32 pid = 1;                  // Process ID
   string path = 2;                 // File path
-  string operation = 3;            // Operation: "read", "write", "create", "delete"
+  string operation = 3;            // Operation: "open", "read", "write", "create", "delete"
   int64 bytes = 4;                 // Bytes read/written (if applicable)
+  uint32 flags = 5;                // Open flags
+}
+
+// Memory mapping event (mmap syscall)
+message TelematicsMmapData {
+  uint32 pid = 1;                  // Process ID
+  uint64 addr = 2;                 // Mapped address
+  uint64 length = 3;               // Mapping length
+  uint32 prot = 4;                 // Protection flags (PROT_READ|PROT_WRITE|PROT_EXEC)
+  uint32 flags = 5;                // Mapping flags (MAP_SHARED|MAP_PRIVATE|etc)
+  string file_path = 6;            // File path if file-backed mapping
+}
+
+// Memory protection change event (mprotect syscall)
+message TelematicsMprotectData {
+  uint32 pid = 1;                  // Process ID
+  uint64 addr = 2;                 // Start address
+  uint64 length = 3;               // Length of region
+  uint32 prot = 4;                 // New protection flags
+}
+
+// Socket data event (sendto/recvfrom syscalls)
+message TelematicsSocketDataData {
+  uint32 pid = 1;                  // Process ID
+  string direction = 2;            // "send" or "recv"
+  string dst_addr = 3;             // Remote address
+  uint32 dst_port = 4;             // Remote port
+  string src_addr = 5;             // Local address
+  uint32 src_port = 6;             // Local port
+  string protocol = 7;             // Protocol: "tcp" or "udp"
+  int64 bytes = 8;                 // Bytes sent/received
 }

@@ -17,7 +17,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                                                         onClose,
                                                     }) => {
     const {formatDateTime} = useDateFormatter();
-    const [activeTab, setActiveTab] = useState<'logs' | 'details' | 'metrics' | 'activity'>('logs');
+    const [activeTab, setActiveTab] = useState<'logs' | 'details' | 'metrics' | 'telematics'>('logs');
     const [selectedJob, setSelectedJob] = useState<Job | null>(null);
     const [jobLoading, setJobLoading] = useState<boolean>(false);
     const [autoScroll, setAutoScroll] = useState<boolean>(true);
@@ -84,75 +84,63 @@ export const JobDetail: React.FC<JobDetailProps> = ({
 
         const parts: string[] = ['rnx job run'];
 
-        // Add command (quote if it contains spaces or special characters)
-        if (job.command) {
-            parts.push(shellEscape(job.command));
-        }
-
-        // Add args (each arg quoted separately if needed)
-        if (job.args && job.args.length > 0) {
-            job.args.forEach(arg => {
-                parts.push(shellEscape(arg));
-            });
-        }
-
-        // Add runtime
+        // Add runtime (flags must come before the command)
         if (job.runtime) {
-            parts.push(`--runtime ${shellEscape(job.runtime)}`);
+            parts.push(`--runtime=${shellEscape(job.runtime)}`);
         }
 
         // Add CPU limits (correct flag: --max-cpu)
         if (job.maxCPU !== undefined && job.maxCPU > 0) {
-            parts.push(`--max-cpu ${job.maxCPU}`);
+            parts.push(`--max-cpu=${job.maxCPU}`);
         }
 
         // Add CPU cores
         if (job.cpuCores) {
-            parts.push(`--cpu-cores ${job.cpuCores}`);
+            parts.push(`--cpu-cores=${job.cpuCores}`);
         }
 
         // Add memory limit (correct flag: --max-memory)
         if (job.maxMemory !== undefined && job.maxMemory > 0) {
-            parts.push(`--max-memory ${job.maxMemory}`);
+            parts.push(`--max-memory=${job.maxMemory}`);
         }
 
         // Add IO limit (correct flag: --max-iobps)
         if (job.maxIOBPS !== undefined && job.maxIOBPS > 0) {
-            parts.push(`--max-iobps ${job.maxIOBPS}`);
+            parts.push(`--max-iobps=${job.maxIOBPS}`);
         }
 
         // Add GPU settings
         if (job.gpuCount !== undefined && job.gpuCount > 0) {
-            parts.push(`--gpu ${job.gpuCount}`);
+            parts.push(`--gpu=${job.gpuCount}`);
         }
 
         if (job.gpuMemoryMb !== undefined && job.gpuMemoryMb > 0) {
-            parts.push(`--gpu-memory ${job.gpuMemoryMb}MB`);
+            parts.push(`--gpu-memory=${job.gpuMemoryMb}MB`);
         }
 
         // Add network
         if (job.network) {
-            parts.push(`--network ${shellEscape(job.network)}`);
+            parts.push(`--network=${shellEscape(job.network)}`);
         }
 
         // Add volumes
         if (job.volumes && job.volumes.length > 0) {
             job.volumes.forEach(volume => {
-                parts.push(`--volume ${shellEscape(volume)}`);
+                parts.push(`--volume=${shellEscape(volume)}`);
             });
         }
 
         // Add uploads (files)
         if (job.uploads && job.uploads.length > 0) {
             job.uploads.forEach(file => {
-                parts.push(`--upload ${shellEscape(file)}`);
+                parts.push(`--upload=${shellEscape(file)}`);
             });
         }
 
         // Add upload directories
         if (job.uploadDirs && job.uploadDirs.length > 0) {
             job.uploadDirs.forEach(dir => {
-                parts.push(`--upload-dir ${shellEscape(dir)}`);
+                parts.push(`--upload-dir=${shellEscape(dir)}`);
             });
         }
 
@@ -172,19 +160,23 @@ export const JobDetail: React.FC<JobDetailProps> = ({
 
         // Add scheduled time
         if (job.scheduledTime) {
-            parts.push(`--schedule ${shellEscape(job.scheduledTime)}`);
+            parts.push(`--schedule=${shellEscape(job.scheduledTime)}`);
         }
 
-        // Join with line continuations for readability
-        // First part (rnx job run) + command + args on one line, then each flag on its own line
-        const commandAndArgs = parts.slice(0, 1 + (job.command ? 1 : 0) + (job.args?.length || 0));
-        const flags = parts.slice(commandAndArgs.length);
-
-        if (flags.length === 0) {
-            return commandAndArgs.join(' ');
+        // Add command (must come after all flags)
+        if (job.command) {
+            parts.push(shellEscape(job.command));
         }
 
-        return commandAndArgs.join(' ') + ' \\\n  ' + flags.join(' \\\n  ');
+        // Add args (each arg quoted separately if needed)
+        if (job.args && job.args.length > 0) {
+            job.args.forEach(arg => {
+                parts.push(shellEscape(arg));
+            });
+        }
+
+        // Join all parts with spaces
+        return parts.join(' ');
     };
 
     const copyToClipboard = (text: string) => {
@@ -246,14 +238,14 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                             Metrics
                         </button>
                         <button
-                            onClick={() => setActiveTab('activity')}
+                            onClick={() => setActiveTab('telematics')}
                             className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                                activeTab === 'activity'
+                                activeTab === 'telematics'
                                     ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                                     : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
                             }`}
                         >
-                            Activity
+                            Telematics
                         </button>
                     </nav>
                 </div>
@@ -335,9 +327,8 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                                 <>
                                     {/* Basic Information */}
                                     <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                                        <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Basic
-                                            Information</h4>
-                                        <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Basic Information</h4>
+                                        <dl className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                                             <div>
                                                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Job
                                                     ID
@@ -450,33 +441,36 @@ export const JobDetail: React.FC<JobDetailProps> = ({
 
                                     {/* Resource Limits */}
                                     <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                                        <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Resource
-                                            Limits</h4>
-                                        <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Resource Limits</h4>
+                                        <dl className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                             <div>
-                                                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Max
-                                                    CPU
-                                                </dt>
+                                                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Max CPU</dt>
                                                 <dd className="mt-1 text-sm text-gray-900 dark:text-white">{selectedJob.maxCPU}%</dd>
                                             </div>
                                             <div>
-                                                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Max
-                                                    Memory
-                                                </dt>
+                                                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Max Memory</dt>
                                                 <dd className="mt-1 text-sm text-gray-900 dark:text-white">{selectedJob.maxMemory} MB</dd>
                                             </div>
                                             <div>
-                                                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Max
-                                                    IO BPS
-                                                </dt>
+                                                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Max IO BPS</dt>
                                                 <dd className="mt-1 text-sm text-gray-900 dark:text-white">{selectedJob.maxIOBPS} bytes/s</dd>
                                             </div>
                                             {selectedJob.cpuCores && (
                                                 <div>
-                                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">CPU
-                                                        Cores
-                                                    </dt>
+                                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">CPU Cores</dt>
                                                     <dd className="mt-1 text-sm text-gray-900 dark:text-white">{selectedJob.cpuCores}</dd>
+                                                </div>
+                                            )}
+                                            {selectedJob.gpuCount !== undefined && selectedJob.gpuCount > 0 && (
+                                                <div>
+                                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">GPU Count</dt>
+                                                    <dd className="mt-1 text-sm text-gray-900 dark:text-white">{selectedJob.gpuCount}</dd>
+                                                </div>
+                                            )}
+                                            {selectedJob.gpuMemoryMb !== undefined && selectedJob.gpuMemoryMb > 0 && (
+                                                <div>
+                                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">GPU Memory</dt>
+                                                    <dd className="mt-1 text-sm text-gray-900 dark:text-white">{selectedJob.gpuMemoryMb} MB</dd>
                                                 </div>
                                             )}
                                         </dl>
@@ -537,8 +531,8 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                         <JobMetrics jobId={jobId}/>
                     )}
 
-                    {/* Activity Tab - eBPF Telemetry */}
-                    {activeTab === 'activity' && (
+                    {/* Telematics Tab - eBPF Events */}
+                    {activeTab === 'telematics' && (
                         <JobActivity jobId={jobId}/>
                     )}
                 </div>

@@ -2,13 +2,14 @@ import {useEffect, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {useJobs} from '../hooks/useJobs';
 import {Job} from '../types/job';
-import {ChevronLeft, ChevronRight, FileText, Play, Plus, Square, Trash2, X, XCircle} from 'lucide-react';
+import {Activity, CheckCircle, ChevronLeft, ChevronRight, FileText, Play, Plus, Square, Trash2, X, XCircle, Zap} from 'lucide-react';
 import {SimpleJobBuilder} from '../components/JobBuilder/SimpleJobBuilder';
 import {JobDetail} from '../components/JobDetail/JobDetail';
 
 const Jobs: React.FC = () => {
     const {t} = useTranslation();
     const {
+        jobs,
         loading,
         error,
         currentPage,
@@ -24,6 +25,11 @@ const Jobs: React.FC = () => {
         refreshJobs,
         deleteAllJobs
     } = useJobs();
+
+    // Calculate job stats
+    const runningJobs = jobs.filter(job => job.status === 'RUNNING').length;
+    const completedJobs = jobs.filter(job => job.status === 'COMPLETED').length;
+    const failedJobs = jobs.filter(job => job.status === 'FAILED').length;
     const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
     const [stoppingJobId, setStoppingJobId] = useState<string | null>(null);
     const [cancelingJobId, setCancelingJobId] = useState<string | null>(null);
@@ -268,34 +274,74 @@ const Jobs: React.FC = () => {
 
     return (
         <div className="p-6">
-            <div className="mb-8">
+            {/* Header */}
+            <div className="mb-4">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold text-white">Jobs</h1>
-                        <p className="mt-2 text-gray-300">Manage and monitor job execution</p>
-                        <div className="mt-2 flex items-center text-sm">
+                        <h1 className="text-2xl font-bold text-white">Jobs</h1>
+                        <div className="mt-1 flex items-center text-sm">
                             <div className="w-2 h-2 rounded-full mr-2 bg-green-500 animate-pulse"></div>
-                            <span className="text-gray-400">Auto-refresh enabled (5s)</span>
+                            <span className="text-gray-400">Auto-refresh enabled</span>
                         </div>
                     </div>
                     <div className="flex space-x-3">
                         {totalJobs > 0 && (
                             <button
                                 onClick={handleDeleteAllJobs}
-                                className="inline-flex items-center px-4 py-2 border border-red-600 rounded-md shadow-sm text-sm font-medium text-red-300 bg-transparent hover:bg-red-600 hover:text-white"
+                                className="inline-flex items-center px-3 py-1.5 border border-red-600 rounded-md shadow-sm text-sm font-medium text-red-300 bg-transparent hover:bg-red-600 hover:text-white"
                                 title="Delete all non-running jobs"
                             >
                                 <Trash2 className="h-4 w-4 mr-2"/>
-                                Delete All Jobs
+                                Delete All
                             </button>
                         )}
                         <button
                             onClick={() => setShowCreateJob(true)}
-                            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                            className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                         >
                             <Plus className="h-4 w-4 mr-2"/>
                             {t('jobs.newJob')}
                         </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Stats Bar */}
+            <div className="mb-4 grid grid-cols-4 gap-3">
+                <div className="bg-gray-800 rounded-lg p-3 flex items-center">
+                    <div className="p-2 bg-blue-500/20 rounded-lg mr-3">
+                        <Zap className="h-5 w-5 text-blue-400"/>
+                    </div>
+                    <div>
+                        <p className="text-xs text-gray-400">Total Jobs</p>
+                        <p className="text-lg font-semibold text-white">{totalJobs}</p>
+                    </div>
+                </div>
+                <div className="bg-gray-800 rounded-lg p-3 flex items-center">
+                    <div className="p-2 bg-yellow-500/20 rounded-lg mr-3">
+                        <Activity className="h-5 w-5 text-yellow-400"/>
+                    </div>
+                    <div>
+                        <p className="text-xs text-gray-400">Running</p>
+                        <p className="text-lg font-semibold text-white">{runningJobs}</p>
+                    </div>
+                </div>
+                <div className="bg-gray-800 rounded-lg p-3 flex items-center">
+                    <div className="p-2 bg-green-500/20 rounded-lg mr-3">
+                        <CheckCircle className="h-5 w-5 text-green-400"/>
+                    </div>
+                    <div>
+                        <p className="text-xs text-gray-400">Completed</p>
+                        <p className="text-lg font-semibold text-white">{completedJobs}</p>
+                    </div>
+                </div>
+                <div className="bg-gray-800 rounded-lg p-3 flex items-center">
+                    <div className="p-2 bg-red-500/20 rounded-lg mr-3">
+                        <XCircle className="h-5 w-5 text-red-400"/>
+                    </div>
+                    <div>
+                        <p className="text-xs text-gray-400">Failed</p>
+                        <p className="text-lg font-semibold text-white">{failedJobs}</p>
                     </div>
                 </div>
             </div>
@@ -544,7 +590,7 @@ rnx job run "echo Hello World"
                                         </label>
                                         <pre
                                             className="bg-gray-900 text-green-400 p-3 rounded-md text-sm overflow-x-auto font-mono">
-rnx job run "python3 script.py" --runtime=python-3.11
+rnx job run --runtime=python-3.11 "python3 script.py"
                                         </pre>
                                     </div>
                                     <div>
@@ -580,7 +626,7 @@ rnx job logs &lt;job-id&gt;
                                         </label>
                                         <pre
                                             className="bg-gray-900 text-green-400 p-3 rounded-md text-sm overflow-x-auto font-mono">
-rnx job run "npm test" --cpu=50 --memory=512MB
+rnx job run --cpu=50 --memory=512MB "npm test"
                                         </pre>
                                     </div>
                                     <div>

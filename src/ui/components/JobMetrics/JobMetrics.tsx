@@ -89,7 +89,19 @@ export const JobMetrics: React.FC<JobMetricsProps> = ({jobId}) => {
             // Try fallback after WebSocket error
             fetchMetrics();
         }
-    }, [connected, metrics.length, streamError]);
+
+        // If WebSocket is connected but no metrics after a short delay, try HTTP fallback
+        // This handles completed jobs where WebSocket stream ends quickly with no live data
+        if (connected && metrics.length === 0) {
+            const fallbackTimer = setTimeout(() => {
+                if (metrics.length === 0 && !usingFallback) {
+                    console.log('WebSocket connected but no metrics received, trying HTTP fallback');
+                    fetchMetrics();
+                }
+            }, 2000); // Wait 2 seconds before falling back
+            return () => clearTimeout(fallbackTimer);
+        }
+    }, [connected, metrics.length, streamError, usingFallback]);
 
     const formatBytes = (bytes: number): string => {
         if (bytes === 0) return '0 B';

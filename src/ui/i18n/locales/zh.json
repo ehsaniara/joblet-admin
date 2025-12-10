@@ -50,7 +50,28 @@
     "connected": "已连接",
     "disconnected": "已断开",
     "loadingJobDetails": "正在加载作业详情...",
-    "waitingToRun": "⏰ 等待运行"
+    "waitingToRun": "⏰ 等待运行",
+    "activity": {
+      "title": "活动",
+      "live": "实时",
+      "autoScroll": "自动滚动",
+      "clear": "清除",
+      "allEvents": "所有事件",
+      "processExec": "进程执行",
+      "outgoingConn": "出站连接",
+      "incomingConn": "入站连接",
+      "dataSent": "发送数据",
+      "dataReceived": "接收数据",
+      "memoryMap": "内存映射",
+      "memProtect": "内存保护",
+      "noEventsYet": "暂无活动事件...",
+      "waitingForEvents": "正在等待作业的eBPF遥测事件。",
+      "connectingToStream": "正在连接遥测流...",
+      "ebpfDescription": "eBPF遥测捕获系统调用事件，包括进程执行、网络连接、套接字I/O和容器内的内存操作。",
+      "cliReference": "CLI命令参考：",
+      "cliHelp": "流式传输此作业的遥测事件。添加 --types=EXEC,NET 来筛选事件类型。",
+      "footerDescription": "活动监控由eBPF提供支持。捕获实时系统调用事件：进程执行(execve)、网络连接(connect/accept)、套接字I/O(send/recv)和内存操作(mmap/mprotect)。"
+    }
   },
   "jobBuilder": {
     "createTitle": "创建新作业",

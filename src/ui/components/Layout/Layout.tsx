@@ -1,6 +1,6 @@
 // React import not needed with modern JSX transform
 import {Link, useLocation} from 'react-router-dom';
-import {Activity, HardDrive, HelpCircle, Home, List, Save, Settings, X} from 'lucide-react';
+import {Activity, Cpu, HardDrive, HelpCircle, List, Save, Settings, X} from 'lucide-react';
 import clsx from 'clsx';
 import {useEffect, useState} from 'react';
 import {useTranslation} from 'react-i18next';
@@ -24,8 +24,8 @@ const Layout: React.FC<LayoutProps> = ({children}) => {
     const [rnxVersion, setRnxVersion] = useState<string>('');
 
     const navigation = [
-        {name: t('nav.dashboard'), href: '/', icon: Home},
-        {name: t('nav.jobs'), href: '/jobs', icon: List},
+        {name: t('nav.jobs'), href: '/', icon: List},
+        {name: t('nav.runtimes', 'Runtimes'), href: '/runtimes', icon: Cpu},
         {name: t('nav.monitoring'), href: '/monitoring', icon: Activity},
         {name: t('nav.resources'), href: '/resources', icon: HardDrive},
     ];
@@ -214,26 +214,18 @@ const Layout: React.FC<LayoutProps> = ({children}) => {
                                 {/* Main Features */}
                                 <div>
                                     <h4 className="text-lg font-semibold text-gray-200 mb-3">Main Sections</h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center">
-                                                <Home className="h-4 w-4 mr-2 text-blue-400"/>
-                                                <strong>Dashboard:</strong> System health overview
-                                            </div>
-                                            <div className="flex items-center">
-                                                <List className="h-4 w-4 mr-2 text-green-400"/>
-                                                <strong>Jobs:</strong> Job list, details, and creation
-                                            </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="flex items-center">
+                                            <List className="h-4 w-4 mr-2 text-green-400"/>
+                                            <strong>Jobs:</strong> Job list, details, and creation
                                         </div>
-                                        <div className="space-y-2">
-                                            <div className="flex items-center">
-                                                <Activity className="h-4 w-4 mr-2 text-yellow-400"/>
-                                                <strong>Monitoring:</strong> Real-time system metrics
-                                            </div>
-                                            <div className="flex items-center">
-                                                <HardDrive className="h-4 w-4 mr-2 text-red-400"/>
-                                                <strong>Resources:</strong> Volume and network management
-                                            </div>
+                                        <div className="flex items-center">
+                                            <Activity className="h-4 w-4 mr-2 text-yellow-400"/>
+                                            <strong>Monitoring:</strong> Real-time system metrics
+                                        </div>
+                                        <div className="flex items-center">
+                                            <HardDrive className="h-4 w-4 mr-2 text-red-400"/>
+                                            <strong>Resources:</strong> Volume and network management
                                         </div>
                                     </div>
                                 </div>
@@ -254,9 +246,9 @@ const Layout: React.FC<LayoutProps> = ({children}) => {
                                 <div>
                                     <h4 className="text-lg font-semibold text-gray-200 mb-3">Getting Started</h4>
                                     <ol className="list-decimal list-inside space-y-1">
-                                        <li>Create jobs using the "New Job" button in the Jobs section</li>
+                                        <li>Create jobs using the "New Job" button</li>
                                         <li>Monitor job executions in real-time</li>
-                                        <li>Use the Dashboard for system health overview</li>
+                                        <li>View job stats at the top of the Jobs page</li>
                                         <li>Adjust settings using the Settings icon in the header</li>
                                     </ol>
                                 </div>

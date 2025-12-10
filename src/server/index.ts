@@ -300,263 +300,118 @@ app.get('/api/runtimes', async (req, res) => {
     }
 });
 
-// Registry runtimes endpoint - fetches from runtime registry
-app.get('/api/registry/runtimes', async (req, res) => {
+// Active runtime build streams
+const runtimeBuildStreams = new Map<string, any>();
+
+// Runtime build endpoint - builds runtime from YAML specification
+app.post('/api/runtimes/build', async (req, res) => {
     try {
-        // Default registry URL - can be overridden via query parameter
-        const registryUrl = req.query.registry as string ||
-            'https://raw.githubusercontent.com/ehsaniara/joblet-runtimes/main/registry.json';
+        const {yamlContent, dryRun, verbose, forceRebuild} = req.body;
 
-        console.log(`Fetching runtime registry from: ${registryUrl}`);
-
-        const registryResponse = await fetch(registryUrl, {
-            headers: {
-                'Accept': 'application/json',
-                'User-Agent': 'Joblet-Admin'
-            }
-        });
-
-        if (!registryResponse.ok) {
-            if (registryResponse.status === 404) {
-                return res.status(404).json({
-                    error: 'Runtime registry not found',
-                    message: 'registry.json not found at the specified URL'
-                });
-            }
-            if (registryResponse.status === 403) {
-                return res.status(403).json({
-                    error: 'Access forbidden',
-                    message: 'Unable to access the runtime registry'
-                });
-            }
-            throw new Error(`Registry fetch error: ${registryResponse.status}`);
+        if (!yamlContent) {
+            return res.status(400).json({error: 'YAML content is required'});
         }
 
-        const registry = await registryResponse.json();
+        // Generate a unique session ID for this build
+        const sessionId = `build-${Date.now()}`;
 
-        // Process runtimes from registry
-        // Registry structure: { version, updated_at, runtimes: { "runtime-name": { "version": {...} } } }
-        const runtimesObj = registry.runtimes || {};
-        const runtimes: any[] = [];
-
-        // Convert nested structure to flat array with all versions
-        Object.entries(runtimesObj).forEach(([runtimeName, versions]: [string, any]) => {
-            // Get all versions for this runtime
-            const versionEntries = Object.entries(versions);
-
-            // Sort versions to find latest
-            const sortedVersions = versionEntries.sort((a, b) => {
-                // Simple version comparison (works for semver)
-                return b[0].localeCompare(a[0]);
-            });
-
-            // Process each version
-            versionEntries.forEach(([version, versionData]: [string, any]) => {
-                const isLatest = version === sortedVersions[0][0];
-
-                runtimes.push({
-                    name: runtimeName,
-                    version: version,
-                    versionTag: isLatest ? 'latest' : version,
-                    fullSpec: `${runtimeName}@${version}`,
-                    displayName: versionData.description || runtimeName,
-                    description: versionData.description || '',
-                    platforms: versionData.platforms || [],
-                    size: versionData.size ? `${(versionData.size / 1024 / 1024).toFixed(2)} MB` : 'Unknown',
-                    type: 'registry',
-                    downloadUrl: versionData.download_url || '',
-                    checksum: versionData.checksum || '',
-                    isLatest: isLatest
-                });
-            });
-        });
-
-        res.json(runtimes);
-    } catch (error) {
-        console.error('Failed to fetch runtime registry:', error);
-        res.status(500).json({
-            error: 'Failed to fetch runtimes from registry',
-            message: error instanceof Error ? error.message : 'Unknown error'
-        });
-    }
-});
-
-// Legacy GitHub runtimes endpoint - kept for backwards compatibility
-app.get('/api/github/runtimes', async (req, res) => {
-    try {
-        // Redirect to registry endpoint with default registry
-        const registryUrl = 'https://raw.githubusercontent.com/ehsaniara/joblet-runtimes/main/registry.json';
-
-        console.log(`Legacy endpoint called, redirecting to registry: ${registryUrl}`);
-
-        const registryResponse = await fetch(registryUrl);
-        if (!registryResponse.ok) {
-            throw new Error(`Registry fetch error: ${registryResponse.status}`);
-        }
-
-        const registry = await registryResponse.json();
-        const runtimesObj = registry.runtimes || {};
-        const runtimes: any[] = [];
-
-        Object.entries(runtimesObj).forEach(([runtimeName, versions]: [string, any]) => {
-            const versionEntries = Object.entries(versions);
-            const sortedVersions = versionEntries.sort((a, b) => b[0].localeCompare(a[0]));
-
-            versionEntries.forEach(([version, versionData]: [string, any]) => {
-                const isLatest = version === sortedVersions[0][0];
-
-                runtimes.push({
-                    name: runtimeName,
-                    version: version,
-                    fullSpec: `${runtimeName}@${version}`,
-                    displayName: versionData.description || runtimeName,
-                    language: runtimeName.split('-')[0],
-                    description: versionData.description || '',
-                    platforms: versionData.platforms || [],
-                    size: versionData.size ? `${(versionData.size / 1024 / 1024).toFixed(2)} MB` : 'Unknown',
-                    type: 'registry',
-                    isLatest: isLatest
-                });
-            });
-        });
-
-        res.json(runtimes);
-    } catch (error) {
-        console.error('Failed to fetch GitHub runtimes:', error);
-        res.status(500).json({
-            error: 'Failed to fetch runtimes from registry',
-            message: error instanceof Error ? error.message : 'Unknown error'
-        });
-    }
-});
-
-// Active runtime installation streams
-const runtimeInstallStreams = new Map<string, any>();
-
-// Runtime installation endpoint
-app.post('/api/runtimes/install', async (req, res) => {
-    try {
-        const {name, force, version} = req.body;
-
-        if (!name) {
-            return res.status(400).json({error: 'Runtime name is required'});
-        }
-
-        // Determine if this is a registry-based install or GitHub-based install
-        // Registry mode: runtimeSpec includes @version or uses @latest, and no repository specified
-        // GitHub mode: repository/branch/path are provided
-        const isRegistryInstall = !req.body.repository || version;
-
-        let runtimeSpec = name;
-        let repository = '';
-        let branch = '';
-        let path = '';
-
-        if (isRegistryInstall) {
-            // Registry-based installation
-            // Format: runtime-name@version or runtime-name@latest
-            if (version && !name.includes('@')) {
-                runtimeSpec = `${name}@${version}`;
-            } else if (!name.includes('@')) {
-                // No version specified, use @latest
-                runtimeSpec = `${name}@latest`;
-            }
-            // Leave repository/branch/path empty to trigger registry mode on server
-            console.log(`Installing runtime from registry: ${runtimeSpec}`);
-        } else {
-            // Legacy GitHub-based installation
-            repository = req.body.repository || 'ehsaniara/joblet';
-            branch = req.body.branch || 'main';
-            path = req.body.path || 'runtimes';
-            console.log(`Installing runtime from GitHub: ${runtimeSpec} from ${repository}/${branch}/${path}`);
-        }
-
-        // Generate a unique session ID for this installation
-        const sessionId = `${runtimeSpec}-${Date.now()}`;
-
-        // Create install request
-        const installRequest = {
-            runtimeSpec: runtimeSpec,
-            repository: repository,
-            branch: branch,
-            path: path,
-            forceReinstall: force || false
-        };
-
-        console.log(`Installing runtime: ${runtimeSpec} (session: ${sessionId}, mode: ${isRegistryInstall ? 'registry' : 'github'})`);
+        console.log(`Building runtime from YAML (session: ${sessionId}, dryRun: ${dryRun}, forceRebuild: ${forceRebuild})`);
 
         // Create session entry BEFORE sending response to avoid race condition
-        runtimeInstallStreams.set(sessionId, {logs: [], completed: false, sentCount: 0});
+        runtimeBuildStreams.set(sessionId, {logs: [], completed: false, sentCount: 0});
 
         // Return immediately with session ID so client can connect to WebSocket
         res.json({
             sessionId: sessionId,
-            message: 'Installation started. Connect to WebSocket for progress.',
-            runtimeSpec: name
+            message: 'Build started. Connect to WebSocket for progress.'
         });
 
-        // Start the streaming install after response is sent
+        // Start the streaming build after response is sent
         setImmediate(() => {
-            const stream = grpcClient.streamingInstallRuntimeFromGithub(installRequest);
-            const sessionData = runtimeInstallStreams.get(sessionId);
-            if (sessionData) {
-                sessionData.stream = stream;
-            }
+            try {
+                const stream = grpcClient.buildRuntime(yamlContent, {
+                    dryRun: dryRun || false,
+                    verbose: verbose || false,
+                    forceRebuild: forceRebuild || false
+                });
+                const sessionData = runtimeBuildStreams.get(sessionId);
+                if (sessionData) {
+                    sessionData.stream = stream;
+                }
 
-            stream.on('data', (chunk: any) => {
-                const sessionData = runtimeInstallStreams.get(sessionId);
+                stream.on('data', (chunk: any) => {
+                const sessionData = runtimeBuildStreams.get(sessionId);
                 if (!sessionData) return;
 
-                // Handle different chunk types
-                if (chunk.result) {
-                    const buildJobId = chunk.result.buildJobUuid || '';
-                    console.log(`Runtime installation job started: ${buildJobId}`);
-                    sessionData.logs.push({
-                        type: 'result',
-                        message: `Installation job started: ${buildJobId}`,
-                        timestamp: new Date().toISOString(),
-                        data: chunk.result
-                    });
-                } else if (chunk.progress) {
-                    console.log(`Progress: ${chunk.progress.message} (${chunk.progress.step}/${chunk.progress.total_steps})`);
+                // Handle BuildRuntimeProgress message types
+                if (chunk.phase) {
+                    // BuildPhaseProgress
+                    const phaseMsg = `[${chunk.phase.phase_number}/${chunk.phase.total_phases}] ${chunk.phase.phase_name}: ${chunk.phase.message}`;
+                    console.log(`Phase: ${phaseMsg}`);
                     sessionData.logs.push({
                         type: 'progress',
-                        message: chunk.progress.message,
-                        step: chunk.progress.step,
-                        totalSteps: chunk.progress.total_steps,
+                        message: chunk.phase.message,
+                        phaseName: chunk.phase.phase_name,
+                        step: chunk.phase.phase_number,
+                        totalSteps: chunk.phase.total_phases,
                         timestamp: new Date().toISOString()
                     });
                 } else if (chunk.log) {
-                    const logData = Buffer.from(chunk.log.data).toString('utf-8');
-                    console.log(`Log: ${logData}`);
+                    // BuildLogLine
+                    console.log(`[${chunk.log.level}] ${chunk.log.message}`);
                     sessionData.logs.push({
                         type: 'log',
-                        message: logData,
+                        level: chunk.log.level,
+                        message: chunk.log.message,
                         timestamp: new Date().toISOString()
                     });
+                } else if (chunk.result) {
+                    // BuildResult
+                    console.log(`Build result: success=${chunk.result.success}, runtime=${chunk.result.runtime_name}`);
+                    if (chunk.result.success) {
+                        sessionData.logs.push({
+                            type: 'complete',
+                            message: chunk.result.message || 'Build completed successfully',
+                            runtimeName: chunk.result.runtime_name,
+                            runtimeVersion: chunk.result.runtime_version,
+                            installPath: chunk.result.install_path,
+                            sizeBytes: chunk.result.size_bytes,
+                            buildDurationMs: chunk.result.build_duration_ms,
+                            timestamp: new Date().toISOString()
+                        });
+                    } else {
+                        sessionData.logs.push({
+                            type: 'error',
+                            message: chunk.result.message || 'Build failed',
+                            timestamp: new Date().toISOString()
+                        });
+                    }
+                    sessionData.completed = true;
+                    sessionData.success = chunk.result.success;
                 }
             });
 
             stream.on('end', () => {
-                const sessionData = runtimeInstallStreams.get(sessionId);
-                if (sessionData) {
+                const sessionData = runtimeBuildStreams.get(sessionId);
+                if (sessionData && !sessionData.completed) {
                     sessionData.completed = true;
                     sessionData.logs.push({
                         type: 'complete',
-                        message: 'Installation completed successfully',
+                        message: 'Build stream ended',
                         timestamp: new Date().toISOString()
                     });
-                    console.log(`Runtime installation completed: ${sessionId}`);
-                    // Keep session data for 30 seconds for late WebSocket connections
-                    setTimeout(() => runtimeInstallStreams.delete(sessionId), 30000);
+                    console.log(`Runtime build completed: ${sessionId}`);
                 }
+                // Keep session data for 30 seconds for late WebSocket connections
+                setTimeout(() => runtimeBuildStreams.delete(sessionId), 30000);
             });
 
             stream.on('error', (error: any) => {
-                console.error(`Runtime installation error:`, error);
-                const sessionData = runtimeInstallStreams.get(sessionId);
+                console.error(`Runtime build error:`, error);
+                const sessionData = runtimeBuildStreams.get(sessionId);
                 if (sessionData) {
                     sessionData.completed = true;
+                    sessionData.success = false;
                     sessionData.error = error.details || error.message || 'Unknown error';
                     sessionData.logs.push({
                         type: 'error',
@@ -565,11 +420,63 @@ app.post('/api/runtimes/install', async (req, res) => {
                     });
                 }
             });
+            } catch (streamError: any) {
+                console.error('Failed to create build stream:', streamError);
+                const sessionData = runtimeBuildStreams.get(sessionId);
+                if (sessionData) {
+                    sessionData.completed = true;
+                    sessionData.success = false;
+                    sessionData.error = streamError.details || streamError.message || 'Failed to connect to joblet server';
+                    sessionData.logs.push({
+                        type: 'error',
+                        message: `Failed to start build: ${streamError.details || streamError.message || 'Connection failed'}`,
+                        timestamp: new Date().toISOString()
+                    });
+                }
+            }
         });
     } catch (error) {
-        console.error('Failed to install runtime:', error);
+        console.error('Failed to build runtime:', error);
         res.status(500).json({
-            error: 'Failed to install runtime',
+            error: 'Failed to build runtime',
+            message: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
+
+// Validate runtime YAML endpoint
+app.post('/api/runtimes/validate', async (req, res) => {
+    try {
+        const {yamlContent} = req.body;
+
+        if (!yamlContent) {
+            return res.status(400).json({error: 'YAML content is required'});
+        }
+
+        console.log('Validating runtime YAML');
+        const result = await grpcClient.validateRuntimeYAML(yamlContent);
+
+        res.json({
+            valid: result.valid,
+            message: result.message,
+            errors: result.errors || [],
+            warnings: result.warnings || [],
+            specInfo: result.spec_info ? {
+                name: result.spec_info.name,
+                version: result.spec_info.version,
+                language: result.spec_info.language,
+                languageVersion: result.spec_info.language_version,
+                description: result.spec_info.description,
+                pipPackages: result.spec_info.pip_packages || [],
+                npmPackages: result.spec_info.npm_packages || [],
+                hasHooks: result.spec_info.has_hooks,
+                requiresGpu: result.spec_info.requires_gpu
+            } : null
+        });
+    } catch (error) {
+        console.error('Failed to validate runtime YAML:', error);
+        res.status(500).json({
+            error: 'Failed to validate runtime YAML',
             message: error instanceof Error ? error.message : 'Unknown error'
         });
     }
@@ -597,6 +504,56 @@ app.delete('/api/runtimes/:name', async (req, res) => {
         console.error(`Failed to remove runtime ${req.params.name}:`, error);
         res.status(500).json({
             error: 'Failed to remove runtime',
+            message: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
+
+// Get runtime details endpoint
+app.get('/api/runtimes/:name', async (req, res) => {
+    try {
+        const {name} = req.params;
+
+        if (!name) {
+            return res.status(400).json({error: 'Runtime name is required'});
+        }
+
+        console.log(`Getting runtime info: ${name}`);
+
+        const result = await grpcClient.getRuntimeInfo(name);
+
+        if (!result.found) {
+            return res.status(404).json({error: `Runtime '${name}' not found`});
+        }
+
+        // Transform the runtime info to match frontend expectations
+        const runtime = result.runtime;
+        res.json({
+            name: runtime.name,
+            language: runtime.language,
+            version: runtime.version,
+            languageVersion: runtime.language_version || runtime.languageVersion,
+            description: runtime.description,
+            sizeBytes: runtime.sizeBytes || runtime.size_bytes,
+            packages: runtime.packages || [],
+            available: runtime.available,
+            requirements: runtime.requirements ? {
+                architectures: runtime.requirements.architectures || [],
+                gpu: runtime.requirements.gpu || false
+            } : null,
+            libraries: runtime.libraries || [],
+            environment: runtime.environment || {},
+            buildInfo: runtime.build_info || runtime.buildInfo ? {
+                builtAt: runtime.build_info?.built_at || runtime.buildInfo?.builtAt,
+                builtWith: runtime.build_info?.built_with || runtime.buildInfo?.builtWith,
+                platform: runtime.build_info?.platform || runtime.buildInfo?.platform
+            } : null,
+            originalYaml: runtime.original_yaml || runtime.originalYaml
+        });
+    } catch (error) {
+        console.error(`Failed to get runtime info ${req.params.name}:`, error);
+        res.status(500).json({
+            error: 'Failed to get runtime info',
             message: error instanceof Error ? error.message : 'Unknown error'
         });
     }
@@ -704,16 +661,154 @@ app.get('/api/jobs/:jobId/logs', async (req, res) => {
     }
 });
 
-// Get job telemetry endpoint - fetches telemetry (metrics + activity events) from job service
-app.get('/api/jobs/:jobId/telemetry', async (req, res) => {
+// Helper function to transform JobMetricsEvent to frontend format
+function transformMetricsEvent(event: any, jobId: string) {
+    return {
+        jobId: event.job_id || jobId,
+        timestamp: event.timestamp ? Number(event.timestamp) / 1e9 : Date.now() / 1000,
+        sampleIntervalSeconds: 5,
+        type: 'metrics',
+        cpu: {
+            usage: event.cpu_percent || 0,
+            usagePercent: event.cpu_percent || 0,
+        },
+        memory: {
+            current: Number(event.memory_bytes) || 0,
+            limit: Number(event.memory_limit) || 0,
+        },
+        io: {
+            readBytes: Number(event.disk_read_bytes) || 0,
+            writeBytes: Number(event.disk_write_bytes) || 0,
+            totalReadBytes: Number(event.disk_read_bytes) || 0,
+            totalWriteBytes: Number(event.disk_write_bytes) || 0,
+        },
+        network: {
+            rxBytes: Number(event.net_recv_bytes) || 0,
+            txBytes: Number(event.net_sent_bytes) || 0,
+        },
+        gpu: {
+            percent: event.gpu_percent || 0,
+            memoryBytes: Number(event.gpu_memory_bytes) || 0,
+        },
+        process: {},
+        limits: {},
+    };
+}
+
+// Helper function to transform TelematicsEvent to frontend format
+function transformTelematicsEvent(event: any, jobId: string) {
+    const eventType = mapEventType(event.type);
+    const baseEvent = {
+        jobId: event.job_id || jobId,
+        timestamp: event.timestamp ? Number(event.timestamp) / 1e9 : Date.now() / 1000,
+        type: eventType,
+    };
+
+    if (eventType === 'EXEC' && event.exec) {
+        const binary = event.exec.binary || '';
+        const comm = binary.split('/').pop() || '';
+        return {
+            ...baseEvent,
+            exec: {
+                pid: event.exec.pid || 0,
+                ppid: event.exec.ppid || 0,
+                comm: comm,
+                filename: binary,
+                args: event.exec.args || [],
+                uid: event.exec.uid || 0,
+                gid: event.exec.gid || 0,
+                exit_code: event.exec.exit_code,
+            },
+        };
+    } else if (eventType === 'NET' && event.connect) {
+        return {
+            ...baseEvent,
+            net: {
+                pid: event.connect.pid || 0,
+                comm: '',
+                src_addr: event.connect.local_address || '',
+                src_port: event.connect.local_port || 0,
+                dst_addr: event.connect.address || '',
+                dst_port: event.connect.port || 0,
+                protocol: event.connect.protocol || 'TCP',
+            },
+        };
+    } else if (eventType === 'ACCEPT' && event.accept) {
+        return {
+            ...baseEvent,
+            accept: {
+                pid: event.accept.pid || 0,
+                comm: '',
+                src_addr: event.accept.address || '',
+                src_port: event.accept.port || 0,
+                dst_addr: event.accept.local_address || '',
+                dst_port: event.accept.local_port || 0,
+                protocol: event.accept.protocol || 'TCP',
+            },
+        };
+    } else if (eventType === 'FILE' && event.file) {
+        return {
+            ...baseEvent,
+            file: {
+                pid: event.file.pid || 0,
+                path: event.file.path || '',
+                operation: event.file.operation || '',
+                bytes: Number(event.file.bytes) || 0,
+            },
+        };
+    } else if (eventType === 'MMAP' && event.mmap) {
+        return {
+            ...baseEvent,
+            mmap: {
+                pid: event.mmap.pid || 0,
+                comm: '',
+                addr: event.mmap.addr || '0x0',
+                length: event.mmap.length || 0,
+                prot: event.mmap.prot || 0,
+                flags: event.mmap.flags || 0,
+                fd: event.mmap.fd || -1,
+                filename: event.mmap.filename,
+            },
+        };
+    } else if (eventType === 'MPROTECT' && event.mprotect) {
+        return {
+            ...baseEvent,
+            mprotect: {
+                pid: event.mprotect.pid || 0,
+                comm: '',
+                addr: event.mprotect.addr || '0x0',
+                length: event.mprotect.length || 0,
+                prot: event.mprotect.prot || 0,
+                old_prot: event.mprotect.old_prot,
+            },
+        };
+    } else if (event.socket_data) {
+        // Handle send/recv socket data events
+        const isSend = event.type === 'send';
+        return {
+            ...baseEvent,
+            type: isSend ? 'SEND' : 'RECV',
+            [isSend ? 'send' : 'recv']: {
+                pid: event.socket_data.pid || 0,
+                comm: '',
+                fd: event.socket_data.fd || 0,
+                bytes: event.socket_data.bytes || 0,
+            },
+        };
+    }
+
+    return baseEvent;
+}
+
+// Get job metrics endpoint - uses new v2.5.3 JobMetrics API
+app.get('/api/jobs/:jobId/metrics', async (req, res) => {
     const {jobId} = req.params;
-    const types = req.query.types ? (req.query.types as string).split(',') : ['metrics'];
     let responseSent = false;
 
     try {
-        console.log(`Getting telemetry for job: ${jobId}, types: ${types.join(',')}`);
+        console.log(`Getting metrics for job: ${jobId}`);
 
-        // First, check if the job is completed
+        // Check if the job is completed
         let jobStatus = null;
         try {
             const jobs = await grpcClient.listJobs();
@@ -724,160 +819,20 @@ app.get('/api/jobs/:jobId/telemetry', async (req, res) => {
             console.warn(`Could not determine job status for ${jobId}:`, err);
         }
 
-        // For completed/failed jobs, use GetJobTelemetry (historical)
-        // For running jobs, use StreamJobTelemetry (live)
-        const isCompleted = jobStatus === 'COMPLETED' || jobStatus === 'FAILED' || jobStatus === 'CANCELLED';
-
-        try {
-            const telemetry: any[] = [];
-            const stream = isCompleted
-                ? grpcClient.getJobTelemetry(jobId, types)
-                : grpcClient.streamJobTelemetry(jobId, types);
-
-            stream.on('data', (event: any) => {
-                // Transform TelemetryEvent to metrics format for backwards compatibility
-                if (event.type === 'metrics' && event.metrics) {
-                    const m = event.metrics;
-                    telemetry.push({
-                        jobId: event.job_id || jobId,
-                        timestamp: event.timestamp ? Number(event.timestamp) / 1e9 : Date.now() / 1000, // Convert nanoseconds to seconds
-                        sampleIntervalSeconds: 5,
-                        type: 'metrics',
-                        cpu: {
-                            usage: m.cpu_percent || 0,
-                            usagePercent: m.cpu_percent || 0,
-                        },
-                        memory: {
-                            current: Number(m.memory_bytes) || 0,
-                            limit: Number(m.memory_limit) || 0,
-                        },
-                        io: {
-                            readBytes: Number(m.disk_read_bytes) || 0,
-                            writeBytes: Number(m.disk_write_bytes) || 0,
-                            totalReadBytes: Number(m.disk_read_bytes) || 0,
-                            totalWriteBytes: Number(m.disk_write_bytes) || 0,
-                        },
-                        network: {
-                            rxBytes: Number(m.net_recv_bytes) || 0,
-                            txBytes: Number(m.net_sent_bytes) || 0,
-                        },
-                        gpu: {
-                            percent: m.gpu_percent || 0,
-                            memoryBytes: Number(m.gpu_memory_bytes) || 0,
-                        },
-                    });
-                } else if (event.type === 'exec' && event.exec) {
-                    telemetry.push({
-                        jobId: event.job_id || jobId,
-                        timestamp: event.timestamp ? Number(event.timestamp) / 1e9 : Date.now() / 1000,
-                        type: 'exec',
-                        exec: event.exec,
-                    });
-                } else if (event.type === 'connect' && event.connect) {
-                    telemetry.push({
-                        jobId: event.job_id || jobId,
-                        timestamp: event.timestamp ? Number(event.timestamp) / 1e9 : Date.now() / 1000,
-                        type: 'connect',
-                        connect: event.connect,
-                    });
-                } else if (event.type === 'file' && event.file) {
-                    telemetry.push({
-                        jobId: event.job_id || jobId,
-                        timestamp: event.timestamp ? Number(event.timestamp) / 1e9 : Date.now() / 1000,
-                        type: 'file',
-                        file: event.file,
-                    });
-                }
-            });
-
-            stream.on('end', () => {
-                if (!responseSent) {
-                    responseSent = true;
-                    console.log(`Retrieved ${telemetry.length} telemetry events for job: ${jobId}`);
-                    res.json(telemetry);
-                }
-            });
-
-            stream.on('error', (error: any) => {
-                if (!responseSent) {
-                    responseSent = true;
-                    console.error(`Failed to get telemetry for ${jobId}:`, error);
-                    res.json([]);
-                }
-            });
-        } catch (error: any) {
-            if (!responseSent) {
-                responseSent = true;
-                console.error(`Failed to stream telemetry for ${jobId}:`, error);
-                res.json([]);
-            }
-        }
-    } catch (error) {
-        if (!responseSent) {
-            responseSent = true;
-            console.error(`Failed to get telemetry for ${jobId}:`, error);
-            res.status(500).json({
-                error: 'Failed to get job telemetry',
-                details: error instanceof Error ? error.message : 'Unknown error'
-            });
-        }
-    }
-});
-
-// Legacy metrics endpoint - redirects to telemetry for backwards compatibility
-app.get('/api/jobs/:jobId/metrics', async (req, res) => {
-    const {jobId} = req.params;
-    let responseSent = false;
-
-    try {
-        console.log(`Getting metrics (legacy) for job: ${jobId}`);
-
-        let jobStatus = null;
-        try {
-            const jobs = await grpcClient.listJobs();
-            const job = jobs?.jobs?.find((j: any) => j.id === jobId || j.uuid === jobId);
-            jobStatus = job?.status;
-        } catch (err) {
-            console.warn(`Could not determine job status for ${jobId}:`, err);
-        }
-
         const isCompleted = jobStatus === 'COMPLETED' || jobStatus === 'FAILED' || jobStatus === 'CANCELLED';
 
         try {
             const metrics: any[] = [];
             const stream = isCompleted
-                ? grpcClient.getJobTelemetry(jobId, ['metrics'])
-                : grpcClient.streamJobTelemetry(jobId, ['metrics']);
+                ? grpcClient.getJobMetrics(jobId)
+                : grpcClient.streamJobMetrics(jobId);
 
             stream.on('data', (event: any) => {
-                if (event.type === 'metrics' && event.metrics) {
-                    const m = event.metrics;
-                    metrics.push({
-                        jobId: event.job_id || jobId,
-                        timestamp: event.timestamp ? Number(event.timestamp) / 1e9 : Date.now() / 1000,
-                        sampleIntervalSeconds: 5,
-                        cpu: {
-                            usage: m.cpu_percent || 0,
-                            usagePercent: m.cpu_percent || 0,
-                        },
-                        memory: {
-                            current: Number(m.memory_bytes) || 0,
-                            limit: Number(m.memory_limit) || 0,
-                        },
-                        io: {
-                            readBytes: Number(m.disk_read_bytes) || 0,
-                            writeBytes: Number(m.disk_write_bytes) || 0,
-                            totalReadBytes: Number(m.disk_read_bytes) || 0,
-                            totalWriteBytes: Number(m.disk_write_bytes) || 0,
-                        },
-                        network: {
-                            rxBytes: Number(m.net_recv_bytes) || 0,
-                            txBytes: Number(m.net_sent_bytes) || 0,
-                        },
-                        process: {},
-                        limits: {},
-                    });
+                // Debug: log raw metrics event (first only)
+                if (metrics.length === 0) {
+                    console.log('Raw metrics event sample:', JSON.stringify(event, null, 2));
                 }
+                metrics.push(transformMetricsEvent(event, jobId));
             });
 
             stream.on('end', () => {
@@ -908,6 +863,153 @@ app.get('/api/jobs/:jobId/metrics', async (req, res) => {
             console.error(`Failed to get metrics for ${jobId}:`, error);
             res.status(500).json({
                 error: 'Failed to get job metrics',
+                details: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    }
+});
+
+// Get job telematics endpoint - uses v2.5.4 JobTelematics API (eBPF events)
+app.get('/api/jobs/:jobId/telematics', async (req, res) => {
+    const {jobId} = req.params;
+    const types = req.query.types ? (req.query.types as string).split(',') : [];
+    let responseSent = false;
+
+    try {
+        console.log(`Getting telematics for job: ${jobId}, types: ${types.join(',') || 'all'}`);
+
+        // Check if the job is completed
+        let jobStatus = null;
+        try {
+            const jobs = await grpcClient.listJobs();
+            const job = jobs?.jobs?.find((j: any) => j.id === jobId || j.uuid === jobId);
+            jobStatus = job?.status;
+        } catch (err) {
+            console.warn(`Could not determine job status for ${jobId}:`, err);
+        }
+
+        const isCompleted = jobStatus === 'COMPLETED' || jobStatus === 'FAILED' || jobStatus === 'CANCELLED';
+
+        try {
+            const events: any[] = [];
+            const stream = isCompleted
+                ? grpcClient.getJobTelematics(jobId, types)
+                : grpcClient.streamJobTelematics(jobId, types);
+
+            stream.on('data', (event: any) => {
+                // Debug: log raw telematics event (first only)
+                if (events.length === 0) {
+                    console.log('Raw telematics event sample:', JSON.stringify(event, null, 2));
+                }
+                events.push(transformTelematicsEvent(event, jobId));
+            });
+
+            stream.on('end', () => {
+                if (!responseSent) {
+                    responseSent = true;
+                    console.log(`Retrieved ${events.length} telematics events for job: ${jobId}`);
+                    res.json(events);
+                }
+            });
+
+            stream.on('error', (error: any) => {
+                if (!responseSent) {
+                    responseSent = true;
+                    console.error(`Failed to get telematics for ${jobId}:`, error);
+                    res.json([]);
+                }
+            });
+        } catch (error: any) {
+            if (!responseSent) {
+                responseSent = true;
+                console.error(`Failed to stream telematics for ${jobId}:`, error);
+                res.json([]);
+            }
+        }
+    } catch (error) {
+        if (!responseSent) {
+            responseSent = true;
+            console.error(`Failed to get telematics for ${jobId}:`, error);
+            res.status(500).json({
+                error: 'Failed to get job telematics',
+                details: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    }
+});
+
+// Legacy telemetry endpoint - combines metrics + telematics for backwards compatibility
+app.get('/api/jobs/:jobId/telemetry', async (req, res) => {
+    const {jobId} = req.params;
+    const types = req.query.types ? (req.query.types as string).split(',') : ['metrics'];
+    let responseSent = false;
+
+    try {
+        console.log(`Getting telemetry (legacy) for job: ${jobId}, types: ${types.join(',')}`);
+
+        // Redirect to appropriate endpoint based on types
+        if (types.length === 1 && types[0] === 'metrics') {
+            // Redirect to metrics endpoint
+            return res.redirect(`/api/jobs/${jobId}/metrics`);
+        } else if (!types.includes('metrics')) {
+            // Redirect to telematics endpoint
+            return res.redirect(`/api/jobs/${jobId}/telematics?types=${types.join(',')}`);
+        }
+
+        // If both metrics and telematics requested, fetch both
+        let jobStatus = null;
+        try {
+            const jobs = await grpcClient.listJobs();
+            const job = jobs?.jobs?.find((j: any) => j.id === jobId || j.uuid === jobId);
+            jobStatus = job?.status;
+        } catch (err) {
+            console.warn(`Could not determine job status for ${jobId}:`, err);
+        }
+
+        const isCompleted = jobStatus === 'COMPLETED' || jobStatus === 'FAILED' || jobStatus === 'CANCELLED';
+        const telemetry: any[] = [];
+        let metricsComplete = false;
+        let telematicsComplete = false;
+
+        const checkComplete = () => {
+            if (metricsComplete && telematicsComplete && !responseSent) {
+                responseSent = true;
+                // Sort by timestamp
+                telemetry.sort((a, b) => a.timestamp - b.timestamp);
+                console.log(`Retrieved ${telemetry.length} combined telemetry events for job: ${jobId}`);
+                res.json(telemetry);
+            }
+        };
+
+        // Fetch metrics
+        const metricsStream = isCompleted
+            ? grpcClient.getJobMetrics(jobId)
+            : grpcClient.streamJobMetrics(jobId);
+
+        metricsStream.on('data', (event: any) => {
+            telemetry.push(transformMetricsEvent(event, jobId));
+        });
+        metricsStream.on('end', () => { metricsComplete = true; checkComplete(); });
+        metricsStream.on('error', () => { metricsComplete = true; checkComplete(); });
+
+        // Fetch telematics
+        const telematicsTypes = types.filter(t => t !== 'metrics');
+        const telematicsStream = isCompleted
+            ? grpcClient.getJobTelematics(jobId, telematicsTypes)
+            : grpcClient.streamJobTelematics(jobId, telematicsTypes);
+
+        telematicsStream.on('data', (event: any) => {
+            telemetry.push(transformTelematicsEvent(event, jobId));
+        });
+        telematicsStream.on('end', () => { telematicsComplete = true; checkComplete(); });
+        telematicsStream.on('error', () => { telematicsComplete = true; checkComplete(); });
+
+    } catch (error) {
+        if (!responseSent) {
+            responseSent = true;
+            console.error(`Failed to get telemetry for ${jobId}:`, error);
+            res.status(500).json({
+                error: 'Failed to get job telemetry',
                 details: error instanceof Error ? error.message : 'Unknown error'
             });
         }
@@ -1080,7 +1182,7 @@ const wss = new WebSocketServer({
 server.on('upgrade', (req, socket, head) => {
     const pathname = new URL(req.url!, `http://${req.headers.host}`).pathname;
 
-    if (pathname === '/ws' || pathname === '/ws/monitor' || pathname.startsWith('/ws/logs/') || pathname.startsWith('/ws/metrics/') || pathname.startsWith('/ws/telemetry/') || pathname.startsWith('/ws/runtime-install/')) {
+    if (pathname === '/ws' || pathname === '/ws/monitor' || pathname.startsWith('/ws/logs/') || pathname.startsWith('/ws/metrics/') || pathname.startsWith('/ws/telematics/') || pathname.startsWith('/ws/telemetry/') || pathname.startsWith('/ws/runtime-build/')) {
         wss.handleUpgrade(req, socket, head, (ws) => {
             wss.emit('connection', ws, req);
         });
@@ -1246,141 +1348,30 @@ wss.on('connection', (ws, req) => {
                 }));
             }
         }
-    } else if (pathname.startsWith('/ws/metrics/') || pathname.startsWith('/ws/telemetry/')) {
-        // Handle telemetry stream (metrics + eBPF events)
-        const isTelemetry = pathname.startsWith('/ws/telemetry/');
-        const jobId = pathname.split(isTelemetry ? '/ws/telemetry/' : '/ws/metrics/')[1]?.split('?')[0];
+    } else if (pathname.startsWith('/ws/metrics/')) {
+        // Handle metrics-only stream (cgroups data) - v2.5.3 API
+        const jobId = pathname.split('/ws/metrics/')[1]?.split('?')[0];
         const node = url.searchParams.get('node') || 'default';
-        const types = url.searchParams.get('types')?.split(',') || ['metrics'];
-        console.log(`Telemetry stream connected for job: ${jobId}, node: ${node}, types: ${types.join(',')}`);
+        console.log(`Metrics stream connected for job: ${jobId}, node: ${node}`);
 
-        // Set the node on gRPC client
         grpcClient.setNode(node);
 
-        // Send initial connection message
         ws.send(JSON.stringify({
             type: 'connection',
-            message: `Connected to telemetry for job ${jobId}`,
+            message: `Connected to metrics for job ${jobId}`,
             timestamp: new Date().toISOString()
         }));
 
         try {
-            const stream = grpcClient.streamJobTelemetry(jobId, types);
+            const stream = grpcClient.streamJobMetrics(jobId);
             let hasReceivedData = false;
 
             stream.on('data', (event: any) => {
                 hasReceivedData = true;
                 if (ws.readyState === ws.OPEN) {
-                    // Transform telemetry event to a normalized format using type-safe mapping
-                    const eventType = mapEventType(event.type);
-                    let transformedData: any = {
-                        jobId: event.job_id || jobId,
-                        timestamp: event.timestamp ? Number(event.timestamp) / 1e9 : Date.now() / 1000,
-                        type: eventType,
-                    };
-
-                    if (eventType === 'metrics' && event.metrics) {
-                        const m = event.metrics;
-                        transformedData = {
-                            ...transformedData,
-                            cpu: {
-                                usage: m.cpu_percent || 0,
-                                usagePercent: m.cpu_percent || 0,
-                            },
-                            memory: {
-                                current: Number(m.memory_bytes) || 0,
-                                limit: Number(m.memory_limit) || 0,
-                            },
-                            io: {
-                                readBytes: Number(m.disk_read_bytes) || 0,
-                                writeBytes: Number(m.disk_write_bytes) || 0,
-                            },
-                            network: {
-                                rxBytes: Number(m.net_recv_bytes) || 0,
-                                txBytes: Number(m.net_sent_bytes) || 0,
-                            },
-                            gpu: {
-                                percent: m.gpu_percent || 0,
-                                memoryBytes: Number(m.gpu_memory_bytes) || 0,
-                            },
-                        };
-                    } else if (eventType === 'EXEC' && event.exec) {
-                        transformedData.exec = {
-                            pid: event.exec.pid || 0,
-                            ppid: event.exec.ppid || 0,
-                            comm: event.exec.comm || '',
-                            filename: event.exec.filename || event.exec.path || '',
-                            args: event.exec.args || event.exec.argv || [],
-                            uid: event.exec.uid || 0,
-                            gid: event.exec.gid || 0,
-                            exit_code: event.exec.exit_code,
-                            duration_ns: event.exec.duration_ns || event.exec.duration,
-                        };
-                    } else if (eventType === 'NET' && event.connect) {
-                        transformedData.net = {
-                            pid: event.connect.pid || 0,
-                            comm: event.connect.comm || '',
-                            src_addr: event.connect.src_addr || event.connect.saddr || '',
-                            src_port: event.connect.src_port || event.connect.sport || 0,
-                            dst_addr: event.connect.dst_addr || event.connect.daddr || '',
-                            dst_port: event.connect.dst_port || event.connect.dport || 0,
-                            protocol: event.connect.protocol || 'TCP',
-                        };
-                    } else if (eventType === 'ACCEPT' && event.accept) {
-                        transformedData.accept = {
-                            pid: event.accept.pid || 0,
-                            comm: event.accept.comm || '',
-                            src_addr: event.accept.src_addr || event.accept.saddr || '',
-                            src_port: event.accept.src_port || event.accept.sport || 0,
-                            dst_addr: event.accept.dst_addr || event.accept.daddr || '',
-                            dst_port: event.accept.dst_port || event.accept.dport || 0,
-                            protocol: event.accept.protocol || 'TCP',
-                        };
-                    } else if (eventType === 'SEND' && event.send) {
-                        transformedData.send = {
-                            pid: event.send.pid || 0,
-                            comm: event.send.comm || '',
-                            fd: event.send.fd || 0,
-                            bytes: event.send.bytes || event.send.size || 0,
-                            dst_addr: event.send.dst_addr,
-                            dst_port: event.send.dst_port,
-                        };
-                    } else if (eventType === 'RECV' && event.recv) {
-                        transformedData.recv = {
-                            pid: event.recv.pid || 0,
-                            comm: event.recv.comm || '',
-                            fd: event.recv.fd || 0,
-                            bytes: event.recv.bytes || event.recv.size || 0,
-                            src_addr: event.recv.src_addr,
-                            src_port: event.recv.src_port,
-                        };
-                    } else if (eventType === 'MMAP' && event.mmap) {
-                        transformedData.mmap = {
-                            pid: event.mmap.pid || 0,
-                            comm: event.mmap.comm || '',
-                            addr: event.mmap.addr || '0x0',
-                            length: event.mmap.length || event.mmap.len || 0,
-                            prot: event.mmap.prot || 0,
-                            flags: event.mmap.flags || 0,
-                            fd: event.mmap.fd || -1,
-                            filename: event.mmap.filename,
-                        };
-                    } else if (eventType === 'MPROTECT' && event.mprotect) {
-                        transformedData.mprotect = {
-                            pid: event.mprotect.pid || 0,
-                            comm: event.mprotect.comm || '',
-                            addr: event.mprotect.addr || '0x0',
-                            length: event.mprotect.length || event.mprotect.len || 0,
-                            prot: event.mprotect.prot || 0,
-                            old_prot: event.mprotect.old_prot,
-                        };
-                    } else if (event.file) {
-                        // Legacy file event - map to appropriate type or keep as FILE
-                        transformedData.file = event.file;
-                    }
-
+                    const transformedData = transformMetricsEvent(event, jobId);
                     ws.send(JSON.stringify({
-                        type: isTelemetry ? 'telemetry' : 'metrics',
+                        type: 'metrics',
                         data: transformedData,
                         timestamp: new Date().toISOString()
                     }));
@@ -1388,36 +1379,211 @@ wss.on('connection', (ws, req) => {
             });
 
             stream.on('end', () => {
-                console.log(`Telemetry stream ended for job: ${jobId}`);
+                console.log(`Metrics stream ended for job: ${jobId}`);
                 if (ws.readyState === ws.OPEN) {
                     ws.send(JSON.stringify({
                         type: 'end',
                         message: hasReceivedData
-                            ? 'Telemetry stream ended'
-                            : 'No telemetry available for this job (telemetry collection may not be enabled)',
+                            ? 'Metrics stream ended'
+                            : 'No metrics available for this job',
                         timestamp: new Date().toISOString()
                     }));
                 }
             });
 
             stream.on('error', (error: any) => {
-                console.error(`Telemetry stream error for job ${jobId}:`, error);
+                console.error(`Metrics stream error for job ${jobId}:`, error);
                 if (ws.readyState === ws.OPEN) {
                     ws.send(JSON.stringify({
                         type: 'error',
-                        message: error.details || error.message || 'Failed to stream telemetry',
+                        message: error.details || error.message || 'Failed to stream metrics',
                         timestamp: new Date().toISOString()
                     }));
                 }
             });
 
             ws.on('close', () => {
-                console.log(`Telemetry stream disconnected for job: ${jobId}`);
-                try {
-                    stream.cancel();
-                } catch (error) {
-                    // Ignore errors when canceling stream
+                console.log(`Metrics stream disconnected for job: ${jobId}`);
+                try { stream.cancel(); } catch (e) { /* ignore */ }
+            });
+        } catch (error) {
+            console.error(`Failed to create metrics stream for job ${jobId}:`, error);
+            if (ws.readyState === ws.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'error',
+                    message: 'Failed to create metrics stream',
+                    timestamp: new Date().toISOString()
+                }));
+            }
+        }
+    } else if (pathname.startsWith('/ws/telematics/')) {
+        // Handle telematics-only stream (eBPF events) - v2.5.4 API
+        const jobId = pathname.split('/ws/telematics/')[1]?.split('?')[0];
+        const node = url.searchParams.get('node') || 'default';
+        const types = url.searchParams.get('types')?.split(',') || [];
+        console.log(`Telematics stream connected for job: ${jobId}, node: ${node}, types: ${types.join(',') || 'all'}`);
+
+        grpcClient.setNode(node);
+
+        ws.send(JSON.stringify({
+            type: 'connection',
+            message: `Connected to telematics for job ${jobId}`,
+            timestamp: new Date().toISOString()
+        }));
+
+        try {
+            const stream = grpcClient.streamJobTelematics(jobId, types);
+            let hasReceivedData = false;
+
+            stream.on('data', (event: any) => {
+                hasReceivedData = true;
+                if (ws.readyState === ws.OPEN) {
+                    const transformedData = transformTelematicsEvent(event, jobId);
+                    ws.send(JSON.stringify({
+                        type: 'telematics',
+                        data: transformedData,
+                        timestamp: new Date().toISOString()
+                    }));
                 }
+            });
+
+            stream.on('end', () => {
+                console.log(`Telematics stream ended for job: ${jobId}`);
+                if (ws.readyState === ws.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'end',
+                        message: hasReceivedData
+                            ? 'Telematics stream ended'
+                            : 'No telematics events available for this job',
+                        timestamp: new Date().toISOString()
+                    }));
+                }
+            });
+
+            stream.on('error', (error: any) => {
+                console.error(`Telematics stream error for job ${jobId}:`, error);
+                if (ws.readyState === ws.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'error',
+                        message: error.details || error.message || 'Failed to stream telematics',
+                        timestamp: new Date().toISOString()
+                    }));
+                }
+            });
+
+            ws.on('close', () => {
+                console.log(`Telematics stream disconnected for job: ${jobId}`);
+                try { stream.cancel(); } catch (e) { /* ignore */ }
+            });
+        } catch (error) {
+            console.error(`Failed to create telematics stream for job ${jobId}:`, error);
+            if (ws.readyState === ws.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'error',
+                    message: 'Failed to create telematics stream',
+                    timestamp: new Date().toISOString()
+                }));
+            }
+        }
+    } else if (pathname.startsWith('/ws/telemetry/')) {
+        // Handle combined telemetry stream (metrics + telematics) - v2.5.4 API
+        const jobId = pathname.split('/ws/telemetry/')[1]?.split('?')[0];
+        const node = url.searchParams.get('node') || 'default';
+        const types = url.searchParams.get('types')?.split(',') || [];
+        const wantMetrics = types.length === 0 || types.includes('metrics');
+        const telematicsTypes = types.filter(t => t !== 'metrics');
+        console.log(`Telemetry stream connected for job: ${jobId}, node: ${node}, types: ${types.join(',') || 'all'}`);
+
+        grpcClient.setNode(node);
+
+        ws.send(JSON.stringify({
+            type: 'connection',
+            message: `Connected to telemetry for job ${jobId}`,
+            timestamp: new Date().toISOString()
+        }));
+
+        try {
+            const streams: any[] = [];
+            let hasReceivedData = false;
+            let streamsEnded = 0;
+            let totalStreams = 0;
+
+            // Start metrics stream if requested
+            if (wantMetrics) {
+                totalStreams++;
+                const metricsStream = grpcClient.streamJobMetrics(jobId);
+                streams.push(metricsStream);
+
+                metricsStream.on('data', (event: any) => {
+                    hasReceivedData = true;
+                    if (ws.readyState === ws.OPEN) {
+                        const transformedData = transformMetricsEvent(event, jobId);
+                        ws.send(JSON.stringify({
+                            type: 'telemetry',
+                            data: transformedData,
+                            timestamp: new Date().toISOString()
+                        }));
+                    }
+                });
+
+                metricsStream.on('end', () => {
+                    streamsEnded++;
+                    checkAllEnded();
+                });
+
+                metricsStream.on('error', (error: any) => {
+                    console.error(`Metrics stream error for job ${jobId}:`, error);
+                });
+            }
+
+            // Start telematics stream if types other than metrics are requested
+            if (telematicsTypes.length > 0 || types.length === 0) {
+                totalStreams++;
+                const telematicsStream = grpcClient.streamJobTelematics(jobId, telematicsTypes);
+                streams.push(telematicsStream);
+
+                telematicsStream.on('data', (event: any) => {
+                    hasReceivedData = true;
+                    if (ws.readyState === ws.OPEN) {
+                        const transformedData = transformTelematicsEvent(event, jobId);
+                        ws.send(JSON.stringify({
+                            type: 'telemetry',
+                            data: transformedData,
+                            timestamp: new Date().toISOString()
+                        }));
+                    }
+                });
+
+                telematicsStream.on('end', () => {
+                    streamsEnded++;
+                    checkAllEnded();
+                });
+
+                telematicsStream.on('error', (error: any) => {
+                    console.error(`Telematics stream error for job ${jobId}:`, error);
+                });
+            }
+
+            function checkAllEnded() {
+                if (streamsEnded >= totalStreams) {
+                    console.log(`Telemetry stream ended for job: ${jobId}`);
+                    if (ws.readyState === ws.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'end',
+                            message: hasReceivedData
+                                ? 'Telemetry stream ended'
+                                : 'No telemetry available for this job',
+                            timestamp: new Date().toISOString()
+                        }));
+                    }
+                }
+            }
+
+            ws.on('close', () => {
+                console.log(`Telemetry stream disconnected for job: ${jobId}`);
+                streams.forEach(stream => {
+                    try { stream.cancel(); } catch (e) { /* ignore */ }
+                });
             });
         } catch (error) {
             console.error(`Failed to create telemetry stream for job ${jobId}:`, error);
@@ -1429,17 +1595,17 @@ wss.on('connection', (ws, req) => {
                 }));
             }
         }
-    } else if (pathname.startsWith('/ws/runtime-install/')) {
-        // Handle runtime installation stream
-        const sessionId = pathname.split('/ws/runtime-install/')[1]?.split('?')[0];
-        console.log(`Runtime installation stream connected for session: ${sessionId}`);
+    } else if (pathname.startsWith('/ws/runtime-build/')) {
+        // Handle runtime build stream (YAML-based)
+        const sessionId = pathname.split('/ws/runtime-build/')[1]?.split('?')[0];
+        console.log(`Runtime build stream connected for session: ${sessionId}`);
 
-        const sessionData = runtimeInstallStreams.get(sessionId);
+        const sessionData = runtimeBuildStreams.get(sessionId);
 
         if (!sessionData) {
             ws.send(JSON.stringify({
                 type: 'error',
-                message: 'Installation session not found or expired',
+                message: 'Build session not found or expired',
                 timestamp: new Date().toISOString()
             }));
             ws.close();
@@ -1449,7 +1615,7 @@ wss.on('connection', (ws, req) => {
         // Send connection confirmation
         ws.send(JSON.stringify({
             type: 'connected',
-            message: 'Connected to installation stream',
+            message: 'Connected to build stream',
             timestamp: new Date().toISOString()
         }));
 
@@ -1460,12 +1626,12 @@ wss.on('connection', (ws, req) => {
             }
         });
 
-        // If installation is already completed, send completion and close
+        // If build is already completed, send completion and close
         if (sessionData.completed) {
             if (ws.readyState === ws.OPEN) {
                 ws.send(JSON.stringify({
                     type: 'end',
-                    message: 'Installation stream ended',
+                    message: 'Build stream ended',
                     timestamp: new Date().toISOString()
                 }));
             }
@@ -1474,7 +1640,7 @@ wss.on('connection', (ws, req) => {
 
         // Set up polling to send new logs
         const pollInterval = setInterval(() => {
-            const currentSessionData = runtimeInstallStreams.get(sessionId);
+            const currentSessionData = runtimeBuildStreams.get(sessionId);
             if (!currentSessionData) {
                 clearInterval(pollInterval);
                 return;
@@ -1497,7 +1663,7 @@ wss.on('connection', (ws, req) => {
                 if (ws.readyState === ws.OPEN) {
                     ws.send(JSON.stringify({
                         type: 'end',
-                        message: 'Installation stream ended',
+                        message: 'Build stream ended',
                         timestamp: new Date().toISOString()
                     }));
                 }
@@ -1506,7 +1672,7 @@ wss.on('connection', (ws, req) => {
         }, 500);
 
         ws.on('close', () => {
-            console.log(`Runtime installation stream disconnected for session: ${sessionId}`);
+            console.log(`Runtime build stream disconnected for session: ${sessionId}`);
             clearInterval(pollInterval);
         });
     }

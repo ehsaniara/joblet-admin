@@ -30,6 +30,15 @@ const NodeSelector: React.FC<NodeSelectorProps> = ({selectedNode, onNodeChange})
             }
             const data = await response.json();
             setNodes(data);
+
+            // Auto-select first available node if current selection isn't valid
+            if (data.length > 0) {
+                const nodeNames = data.map((n: Node) => n.name);
+                if (!nodeNames.includes(selectedNode)) {
+                    console.log(`Selected node '${selectedNode}' not found, auto-selecting first available: ${data[0].name}`);
+                    onNodeChange(data[0].name);
+                }
+            }
         } catch (err) {
             console.error('Error fetching nodes:', err);
             setError('Failed to load nodes');

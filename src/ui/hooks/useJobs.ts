@@ -2,6 +2,7 @@ import {useCallback, useEffect, useState} from 'react';
 import {Job, JobExecuteRequest} from '../types/job';
 import {apiService} from '../services/apiService';
 import {useAutoRefresh} from './useAutoRefresh';
+import {useNode} from '../contexts/NodeContext';
 
 interface UseJobsReturn {
     jobs: Job[];
@@ -65,10 +66,16 @@ export const useJobs = (): UseJobsReturn => {
     const [jobs, setJobs] = useState<Job[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
+    const {selectedNode} = useNode();
 
     // Pagination state
     const [currentPage, setCurrentPage] = useState<number>(1);
     const [pageSize, setPageSize] = useState<number>(10);
+
+    // Sync apiService with selected node
+    useEffect(() => {
+        apiService.setNode(selectedNode);
+    }, [selectedNode]);
 
     const fetchJobs = useCallback(async (showLoading = false): Promise<void> => {
         try {
@@ -87,7 +94,7 @@ export const useJobs = (): UseJobsReturn => {
                 setLoading(false);
             }
         }
-    }, []);
+    }, [selectedNode]); // Re-create when node changes to trigger refresh
 
     const refreshJobs = useCallback(async (): Promise<void> => {
         await fetchJobs(true);

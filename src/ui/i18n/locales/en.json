@@ -50,7 +50,28 @@
     "connected": "Connected",
     "disconnected": "Disconnected",
     "loadingJobDetails": "Loading job details...",
-    "waitingToRun": "⏰ Waiting to run"
+    "waitingToRun": "⏰ Waiting to run",
+    "activity": {
+      "title": "Activity",
+      "live": "Live",
+      "autoScroll": "Auto-scroll",
+      "clear": "Clear",
+      "allEvents": "All Events",
+      "processExec": "Process Exec",
+      "outgoingConn": "Outgoing Conn",
+      "incomingConn": "Incoming Conn",
+      "dataSent": "Data Sent",
+      "dataReceived": "Data Received",
+      "memoryMap": "Memory Map",
+      "memProtect": "Mem Protect",
+      "noEventsYet": "No activity events yet...",
+      "waitingForEvents": "Waiting for eBPF telemetry events from the job.",
+      "connectingToStream": "Connecting to telemetry stream...",
+      "ebpfDescription": "eBPF telemetry captures syscall events including process executions, network connections, socket I/O, and memory operations from within the job container.",
+      "cliReference": "CLI Command Reference:",
+      "cliHelp": "Stream telemetry events for this job. Add --types=EXEC,NET to filter event types.",
+      "footerDescription": "Activity monitoring powered by eBPF. Captures real-time syscall events: process executions (execve), network connections (connect/accept), socket I/O (send/recv), and memory operations (mmap/mprotect)."
+    }
   },
   "jobBuilder": {
     "createTitle": "Create New Job",

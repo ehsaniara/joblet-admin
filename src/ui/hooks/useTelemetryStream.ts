@@ -101,25 +101,32 @@ export interface TelemetryEvent {
     };
 }
 
+// Default maximum events to keep in memory (LRU eviction)
+const DEFAULT_MAX_EVENTS = 1000;
+
 interface UseTelemetryStreamResult {
     events: TelemetryEvent[];
     connected: boolean;
     error: string | null;
     clearEvents: () => void;
+    totalEventsReceived: number;
 }
 
 export const useTelemetryStream = (
     jobId: string | null,
-    types: string[] = ['EXEC', 'NET', 'ACCEPT', 'SEND', 'RECV', 'MMAP', 'MPROTECT']
+    types: string[] = ['EXEC', 'NET', 'ACCEPT', 'SEND', 'RECV', 'MMAP', 'MPROTECT'],
+    maxEvents: number = DEFAULT_MAX_EVENTS
 ): UseTelemetryStreamResult => {
     const [events, setEvents] = useState<TelemetryEvent[]>([]);
     const [connected, setConnected] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [totalEventsReceived, setTotalEventsReceived] = useState(0);
     const wsRef = useRef<WebSocket | null>(null);
     const {selectedNode} = useNode();
 
     const clearEvents = useCallback(() => {
         setEvents([]);
+        setTotalEventsReceived(0);
     }, []);
 
     // Memoize types to prevent unnecessary WebSocket reconnections
@@ -132,15 +139,15 @@ export const useTelemetryStream = (
 
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsHost = (import.meta as any).env?.VITE_WS_HOST || window.location.host;
-        const wsUrl = `${wsProtocol}//${wsHost}/ws/telemetry/${jobId}?node=${selectedNode}&types=${typesKey}`;
+        const wsUrl = `${wsProtocol}//${wsHost}/ws/telematics/${jobId}?node=${selectedNode}&types=${typesKey}`;
 
-        console.log('Connecting to telemetry WebSocket:', wsUrl);
+        console.log('Connecting to telematics WebSocket:', wsUrl);
 
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
-            console.log('Telemetry WebSocket connected');
+            console.log('Telematics WebSocket connected');
             setConnected(true);
             setError(null);
         };
@@ -149,32 +156,40 @@ export const useTelemetryStream = (
             try {
                 const message = JSON.parse(event.data);
 
-                if (message.type === 'telemetry' && message.data) {
+                if (message.type === 'telematics' && message.data) {
                     const telemetryEvent = message.data as TelemetryEvent;
                     // Only add non-metrics events (eBPF events)
                     if (telemetryEvent.type !== 'metrics') {
-                        setEvents(prev => [...prev, telemetryEvent]);
+                        setTotalEventsReceived(prev => prev + 1);
+                        setEvents(prev => {
+                            const newEvents = [...prev, telemetryEvent];
+                            // LRU eviction: keep only the last maxEvents
+                            if (newEvents.length > maxEvents) {
+                                return newEvents.slice(-maxEvents);
+                            }
+                            return newEvents;
+                        });
                     }
                 } else if (message.type === 'error') {
-                    console.error('Telemetry stream error:', message.message);
+                    console.error('Telematics stream error:', message.message);
                     setError(message.message);
                 } else if (message.type === 'end') {
-                    console.log('Telemetry stream ended:', message.message);
+                    console.log('Telematics stream ended:', message.message);
                 } else if (message.type === 'connection') {
-                    console.log('Telemetry connection message:', message.message);
+                    console.log('Telematics connection message:', message.message);
                 }
             } catch (e) {
-                console.error('Failed to parse telemetry message:', e);
+                console.error('Failed to parse telematics message:', e);
             }
         };
 
         ws.onerror = (event) => {
-            console.error('Telemetry WebSocket error:', event);
+            console.error('Telematics WebSocket error:', event);
             setError('WebSocket connection error');
         };
 
         ws.onclose = (event) => {
-            console.log('Telemetry WebSocket closed:', event.code, event.reason);
+            console.log('Telematics WebSocket closed:', event.code, event.reason);
             setConnected(false);
         };
 
@@ -184,7 +199,7 @@ export const useTelemetryStream = (
                 wsRef.current = null;
             }
         };
-    }, [jobId, selectedNode, typesKey]);
+    }, [jobId, selectedNode, typesKey, maxEvents]);
 
-    return {events, connected, error, clearEvents};
+    return {events, connected, error, clearEvents, totalEventsReceived};
 };
