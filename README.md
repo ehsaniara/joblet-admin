@@ -77,6 +77,30 @@ JOBLET_NODE=default           # Node to connect to (default: default)
 
 📖 For detailed configuration including mTLS setup and multi-node configurations, see the **[Configuration Guide](docs/CONFIGURATION.md)**.
 
+### Remote Access via SSH Tunnel
+
+You can use joblet-admin remotely to connect to AWS EC2 instances (or any remote server) using an SSH tunnel:
+
+1. **Create an SSH tunnel** to forward the remote Joblet gRPC port to your local machine:
+
+```bash
+ssh -i "your-key.pem" -N -L 50051:172.31.x.x:50051 ubuntu@ec2-x-x-x-x.compute-1.amazonaws.com
+```
+
+> Replace `172.31.x.x` with the private IP of your Joblet server, and `ec2-x-x-x-x.compute-1.amazonaws.com` with your EC2 public DNS.
+
+2. **Update your rnx config** (`~/.rnx/rnx-config.yml`) to point to the tunneled address:
+
+```yaml
+version: "3.0"
+nodes:
+  default:
+    address: "localhost:50051"
+    ...
+```
+
+3. **Start joblet-admin** and it will connect through the SSH tunnel to your remote Joblet server.
+
 ## Usage
 
 ### Start Server
